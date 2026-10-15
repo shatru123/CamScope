@@ -1,0 +1,36 @@
+name: CamScope CI - Build & Test
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-14, ubuntu-latest, windows-latest]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore CamScope.slnx
+
+    - name: Build solution
+      run: dotnet build CamScope.slnx --configuration Release --no-restore
+
+    - name: Run automated test suite
+      run: dotnet test CamScope.slnx --configuration Release --no-build --verbosity normal
+
+    - name: Publish desktop application
+      run: dotnet publish src/CamScope.App/CamScope.App.csproj --configuration Release --no-build -o ./publish

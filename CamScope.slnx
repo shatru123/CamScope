@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CamScope.App/CamScope.App.csproj" />
+    <Project Path="src/CamScope.Application/CamScope.Application.csproj" />
+    <Project Path="src/CamScope.CameraProtocols/CamScope.CameraProtocols.csproj" />
+    <Project Path="src/CamScope.Core/CamScope.Core.csproj" />
+    <Project Path="src/CamScope.Discovery/CamScope.Discovery.csproj" />
+    <Project Path="src/CamScope.Infrastructure/CamScope.Infrastructure.csproj" />
+    <Project Path="src/CamScope.Persistence/CamScope.Persistence.csproj" />
+    <Project Path="src/CamScope.Streaming/CamScope.Streaming.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CamScope.IntegrationTests/CamScope.IntegrationTests.csproj" />
+    <Project Path="tests/CamScope.UnitTests/CamScope.UnitTests.csproj" />
+  </Folder>
+</Solution>

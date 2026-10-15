@@ -1,0 +1,138 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Resources & Colors -->
+  <Styles.Resources>
+    <SolidColorBrush x:Key="AppBackground">#0B0F19</SolidColorBrush>
+    <SolidColorBrush x:Key="SurfaceBackground">#111827</SolidColorBrush>
+    <SolidColorBrush x:Key="CardBackground">#1F2937</SolidColorBrush>
+    <SolidColorBrush x:Key="BorderColor">#374151</SolidColorBrush>
+    <SolidColorBrush x:Key="SubtleBorder">#1E293B</SolidColorBrush>
+
+    <SolidColorBrush x:Key="CyanAccent">#06B6D4</SolidColorBrush>
+    <SolidColorBrush x:Key="CyanGlow">#22D3EE</SolidColorBrush>
+    <SolidColorBrush x:Key="VioletAccent">#8B5CF6</SolidColorBrush>
+    <SolidColorBrush x:Key="GreenSuccess">#10B981</SolidColorBrush>
+    <SolidColorBrush x:Key="AmberWarning">#F59E0B</SolidColorBrush>
+    <SolidColorBrush x:Key="RedDanger">#EF4444</SolidColorBrush>
+
+    <SolidColorBrush x:Key="TextPrimary">#F9FAFB</SolidColorBrush>
+    <SolidColorBrush x:Key="TextSecondary">#9CA3AF</SolidColorBrush>
+    <SolidColorBrush x:Key="TextMuted">#6B7280</SolidColorBrush>
+  </Styles.Resources>
+
+  <!-- Typography -->
+  <Style Selector="TextBlock.pageHeader">
+    <Setter Property="FontSize" Value="22"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
+  </Style>
+
+  <Style Selector="TextBlock.pageSubHeader">
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="Margin" Value="0,0,0,16"/>
+  </Style>
+
+  <Style Selector="TextBlock.cardTitle">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+  </Style>
+
+  <!-- Card Styles -->
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{StaticResource SurfaceBackground}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource BorderColor}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="8"/>
+    <Setter Property="Padding" Value="16"/>
+  </Style>
+
+  <Style Selector="Border.metricCard">
+    <Setter Property="Background" Value="{StaticResource SurfaceBackground}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SubtleBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="8"/>
+    <Setter Property="Padding" Value="16"/>
+    <Setter Property="MinHeight" Value="80"/>
+  </Style>
+
+  <!-- Buttons -->
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{StaticResource CyanAccent}"/>
+    <Setter Property="Foreground" Value="#090D16"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="16,8"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="Button.primary:pointerover">
+    <Setter Property="Background" Value="{StaticResource CyanGlow}"/>
+  </Style>
+
+  <Style Selector="Button.secondary">
+    <Setter Property="Background" Value="{StaticResource CardBackground}"/>
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource BorderColor}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="14,7"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+
+  <Style Selector="Button.danger">
+    <Setter Property="Background" Value="{StaticResource RedDanger}"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="14,7"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+
+  <!-- Navigation Items -->
+  <Style Selector="ListBoxItem.navItem">
+    <Setter Property="Padding" Value="12,10"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Margin" Value="4,2"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+
+  <!-- Badges -->
+  <Style Selector="Border.badgeSuccess">
+    <Setter Property="Background" Value="#1A10B981"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GreenSuccess}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+  <Style Selector="Border.badgeWarning">
+    <Setter Property="Background" Value="#1AF59E0B"/>
+    <Setter Property="BorderBrush" Value="{StaticResource AmberWarning}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+  <Style Selector="Border.badgeDanger">
+    <Setter Property="Background" Value="#1AEF4444"/>
+    <Setter Property="BorderBrush" Value="{StaticResource RedDanger}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+  <Style Selector="Border.badgeCyan">
+    <Setter Property="Background" Value="#1A06B6D4"/>
+    <Setter Property="BorderBrush" Value="{StaticResource CyanAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+  <Style Selector="Border.badgeViolet">
+    <Setter Property="Background" Value="#1A8B5CF6"/>
+    <Setter Property="BorderBrush" Value="{StaticResource VioletAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+</Styles>

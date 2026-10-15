@@ -1,0 +1,152 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.DiscoveryView"
+             x:DataType="vm:DiscoveryViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <!-- Header -->
+      <StackPanel>
+        <TextBlock Text="Network Discovery" Classes="pageHeader"/>
+        <TextBlock Text="Enumerate local network interfaces and execute ONVIF WS-Discovery probes" Classes="pageSubHeader"/>
+      </StackPanel>
+
+      <!-- Discovery Configuration Card -->
+      <Border Classes="card">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Network Interface &amp; Authorization" Classes="cardTitle"/>
+
+          <Grid ColumnDefinitions="*, *" RowDefinitions="Auto, Auto">
+
+            <!-- Interface Selector -->
+            <StackPanel Grid.Column="0" Spacing="6" Margin="0,0,12,0">
+              <TextBlock Text="Select Network Interface:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <ComboBox ItemsSource="{Binding Interfaces}" SelectedItem="{Binding SelectedInterface}"
+                        HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding DisplayText}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+
+            <!-- Interface Details Pill -->
+            <Border Grid.Column="1" Background="{StaticResource CardBackground}" CornerRadius="6" Padding="12" Margin="12,0,0,0">
+              <StackPanel Spacing="4">
+                <TextBlock Text="Selected Interface Details" FontWeight="SemiBold" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+                <TextBlock Text="{Binding SelectedInterface.Name, StringFormat='Interface: {0}'}" FontSize="12"/>
+                <TextBlock Text="{Binding SelectedInterface.IPv4Address, StringFormat='IPv4: {0}'}" FontSize="12"/>
+                <TextBlock Text="{Binding SelectedInterface.SubnetMask, StringFormat='Subnet: {0}'}" FontSize="12"/>
+                <TextBlock Text="{Binding SelectedInterface.SupportsMulticast, StringFormat='Multicast Supported: {0}'}" FontSize="12" Foreground="{StaticResource GreenSuccess}"/>
+              </StackPanel>
+            </Border>
+
+          </Grid>
+
+          <!-- Explicit Authorization Checkbox -->
+          <Border Background="#1E293B" CornerRadius="6" Padding="12">
+            <CheckBox IsChecked="{Binding IsAuthorizedConfirmed}" HorizontalAlignment="Stretch">
+              <TextBlock Text="I confirm that I am explicitly authorized to discover surveillance devices on this network."
+                         FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+            </CheckBox>
+          </Border>
+
+          <!-- Discovery Action Buttons -->
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="Start WS-Discovery" Command="{Binding StartDiscoveryCommand}"
+                    IsEnabled="{Binding CanStartDiscovery}" Classes="primary"/>
+            <Button Content="Cancel Discovery" Command="{Binding CancelDiscoveryCommand}"
+                    IsEnabled="{Binding IsDiscovering}" Classes="danger"/>
+            <Button Content="Add Discovered to Inventory" Command="{Binding SaveAllToInventoryCommand}"
+                    IsEnabled="{Binding DiscoveredDevices.Count}" Classes="secondary"/>
+          </StackPanel>
+
+          <!-- Progress Section -->
+          <StackPanel Spacing="6" IsVisible="{Binding IsDiscovering}">
+            <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="6"
+                         Foreground="{StaticResource CyanAccent}"/>
+            <Grid ColumnDefinitions="*, Auto">
+              <TextBlock Grid.Column="0" Text="{Binding ProgressStep}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <TextBlock Grid.Column="1" Text="{Binding ProgressPercentage, StringFormat='{}{0}%'}" FontSize="12" FontWeight="Bold"/>
+            </Grid>
+          </StackPanel>
+
+          <!-- Status / Error message -->
+          <TextBlock Text="{Binding ProgressStep}" IsVisible="{Binding !IsDiscovering}"
+                     FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+          <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                     FontSize="12" Foreground="{StaticResource RedDanger}"/>
+
+        </StackPanel>
+      </Border>
+
+      <!-- Discovered Devices Results List -->
+      <Border Classes="card">
+        <StackPanel Spacing="14">
+          <Grid ColumnDefinitions="*, Auto">
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Discovery Results" Classes="cardTitle"/>
+              <TextBlock Text="Devices identified via standard ONVIF ProbeMatch responses" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+            </StackPanel>
+            <Border Grid.Column="1" Classes="badgeCyan" VerticalAlignment="Center">
+              <TextBlock Text="{Binding DiscoveredDevices.Count, StringFormat='{}{0} Devices Found'}"
+                         FontSize="11" FontWeight="Bold"/>
+            </Border>
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding DiscoveredDevices}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{StaticResource CardBackground}" CornerRadius="8" Padding="14" Margin="0,0,0,10"
+                        BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1">
+                  <Grid ColumnDefinitions="*, Auto">
+
+                    <StackPanel Grid.Column="0" Spacing="6">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource TextPrimary}"/>
+                        <Border Classes="badgeCyan" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Protocol}" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                        <Border Classes="badgeWarning" IsVisible="{Binding IsDemoDevice}" VerticalAlignment="Center">
+                          <TextBlock Text="DEMO" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                      </StackPanel>
+
+                      <Grid ColumnDefinitions="Auto, Auto, Auto" Margin="0,2,0,0">
+                        <TextBlock Grid.Column="0" Text="{Binding Host, StringFormat='IP: {0}'}" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,16,0"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Port, StringFormat='Port: {0}'}" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,16,0"/>
+                        <TextBlock Grid.Column="2" Text="{Binding Model, StringFormat='Model: {0}'}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                      </Grid>
+
+                      <TextBlock Text="{Binding PrimaryServiceAddress, StringFormat='Service Endpoint: {0}'}"
+                                 FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                      <TextBlock Text="{Binding EndpointId, StringFormat='Endpoint UUID: {0}'}"
+                                 FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
+                      <Border Classes="badgeViolet">
+                        <TextBlock Text="Discovered" FontSize="11" FontWeight="Bold"/>
+                      </Border>
+                    </StackPanel>
+
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="No devices discovered in this session yet. Select an authorized interface and start discovery."
+                     IsVisible="{Binding !DiscoveredDevices.Count}"
+                     Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8"/>
+
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.DiagnosticsView"
+             x:DataType="vm:DiagnosticsViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <Grid ColumnDefinitions="*, Auto">
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="Health &amp; Diagnostics" Classes="pageHeader"/>
+          <TextBlock Text="Platform runtime telemetry, socket subsystem, and database health metrics" Classes="pageSubHeader"/>
+        </StackPanel>
+        <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}"
+                Classes="secondary" VerticalAlignment="Top"/>
+      </Grid>
+
+      <Border Classes="card">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Runtime Environment" Classes="cardTitle"/>
+
+          <Grid ColumnDefinitions="200, *" RowDefinitions="Auto, Auto, Auto, Auto, Auto, Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Operating System:" Foreground="{StaticResource TextSecondary}" Margin="0,4"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding OsDescription}" FontWeight="SemiBold" Margin="0,4"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Architecture:" Foreground="{StaticResource TextSecondary}" Margin="0,4"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding OsArchitecture}" FontWeight="SemiBold" Margin="0,4"/>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text=".NET Framework:" Foreground="{StaticResource TextSecondary}" Margin="0,4"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FrameworkDescription}" FontWeight="SemiBold" Margin="0,4"/>
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Application Uptime:" Foreground="{StaticResource TextSecondary}" Margin="0,4"/>
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Uptime}" FontWeight="SemiBold" Foreground="{StaticResource CyanAccent}" Margin="0,4"/>
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Process Memory:" Foreground="{StaticResource TextSecondary}" Margin="0,4"/>
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding MemoryUsageMb}" FontWeight="SemiBold" Margin="0,4"/>
+
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Network Subsystem:" Foreground="{StaticResource TextSecondary}" Margin="0,4"/>
+            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding NetworkStatus}" FontWeight="SemiBold" Foreground="{StaticResource GreenSuccess}" Margin="0,4"/>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Persistence &amp; Storage" Classes="cardTitle"/>
+          <TextBlock Text="SQLite local inventory and activity store (passwords are strictly excluded and managed via OS keychain):"
+                     FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+          <TextBox Text="{Binding DatabasePath}" IsReadOnly="True"/>
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

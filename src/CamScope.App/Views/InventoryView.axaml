@@ -1,0 +1,176 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             xmlns:models="using:CamScope.Core.Models"
+             x:Class="CamScope.App.Views.InventoryView"
+             x:DataType="vm:InventoryViewModel">
+
+  <Grid>
+
+    <!-- Main Inventory Content -->
+    <Grid RowDefinitions="Auto, Auto, *, Auto">
+
+      <!-- Page Header -->
+      <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,16">
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="Camera Inventory" Classes="pageHeader"/>
+          <TextBlock Text="Manage discovered and registered surveillance devices, authentication, and metadata" Classes="pageSubHeader"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+          <Button Content="Add Manual Device" Command="{Binding OpenAddDialogCommand}" Classes="primary"/>
+          <Button Content="Export CSV" Command="{Binding ExportReportCommand}" CommandParameter="csv" Classes="secondary"/>
+          <Button Content="Export JSON" Command="{Binding ExportReportCommand}" CommandParameter="json" Classes="secondary"/>
+          <Button Content="Clear All" Command="{Binding ClearAllDevicesCommand}" Classes="danger"/>
+        </StackPanel>
+      </Grid>
+
+      <!-- Filter & Search Bar -->
+      <Border Grid.Row="1" Classes="card" Margin="0,0,0,16" Padding="12">
+        <Grid ColumnDefinitions="*, Auto, Auto, Auto">
+          <!-- Search box -->
+          <TextBox Grid.Column="0" Text="{Binding SearchQuery}" Watermark="Search by name, IP, vendor, model, location..."
+                   Margin="0,0,12,0"/>
+
+          <!-- Vendor Filter -->
+          <ComboBox Grid.Column="1" ItemsSource="{Binding VendorFilters}" SelectedItem="{Binding SelectedVendorFilter}"
+                    Width="160" Margin="0,0,8,0"/>
+
+          <!-- Status Filter -->
+          <ComboBox Grid.Column="2" ItemsSource="{Binding StatusFilters}" SelectedItem="{Binding SelectedStatusFilter}"
+                    Width="160" Margin="0,0,8,0"/>
+
+          <!-- Toggle View -->
+          <ToggleButton Grid.Column="3" Content="Card / Table" IsChecked="{Binding IsCardView}" Classes="secondary"/>
+        </Grid>
+      </Border>
+
+      <!-- Devices Table / DataGrid View -->
+      <Border Grid.Row="2" Classes="card" Padding="0">
+        <DataGrid ItemsSource="{Binding FilteredDevices}" SelectedItem="{Binding SelectedDevice}"
+                  AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal"
+                  CanUserSortColumns="True" Background="Transparent">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Device Name" Binding="{Binding DisplayName}" Width="2*"/>
+            <DataGridTextColumn Header="Vendor" Binding="{Binding Vendor}" Width="1.5*"/>
+            <DataGridTextColumn Header="Model" Binding="{Binding Model}" Width="1.5*"/>
+            <DataGridTextColumn Header="Host / IP" Binding="{Binding Host}" Width="1.5*"/>
+            <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="0.8*"/>
+            <DataGridTextColumn Header="Connection" Binding="{Binding ConnectionState}" Width="1.2*"/>
+            <DataGridTextColumn Header="Auth State" Binding="{Binding AuthState}" Width="1.2*"/>
+            <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="1.5*"/>
+            <DataGridTemplateColumn Header="Actions" Width="1.5*">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate DataType="models:CameraDevice">
+                  <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                    <Button Content="Auth"
+                            Command="{Binding ((vm:InventoryViewModel)DataContext).OpenAuthDialogCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            Classes="secondary" Padding="6,2" FontSize="11"/>
+                    <Button Content="Del"
+                            Command="{Binding ((vm:InventoryViewModel)DataContext).DeleteDeviceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            Classes="danger" Padding="6,2" FontSize="11"/>
+                  </StackPanel>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+          </DataGrid.Columns>
+        </DataGrid>
+      </Border>
+
+      <!-- Feedback / Status bar -->
+      <TextBlock Grid.Row="3" Text="{Binding ExportFeedback}" Margin="0,8,0,0"
+                 Foreground="{StaticResource CyanAccent}" FontSize="12"/>
+
+    </Grid>
+
+    <!-- Modal Dialog: Authenticate Device -->
+    <Border Background="#CC000000" IsVisible="{Binding IsAuthDialogOpen}"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+      <Border Classes="card" Width="440" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="24">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Authenticate Device" FontWeight="Bold" FontSize="18" Foreground="{StaticResource TextPrimary}"/>
+          <TextBlock Text="Enter authorized credentials provided by the camera owner or administrator."
+                     FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+
+          <Border Background="{StaticResource SurfaceBackground}" CornerRadius="6" Padding="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding SelectedDevice.DisplayName}" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="{Binding SelectedDevice.Host, StringFormat='Host: {0}'}" FontSize="12"/>
+              <TextBlock Text="{Binding SelectedDevice.Vendor, StringFormat='Vendor: {0}'}" FontSize="12"/>
+            </StackPanel>
+          </Border>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Username:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <TextBox Text="{Binding AuthUsername}"/>
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Password:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <TextBox Text="{Binding AuthPassword}" PasswordChar="*"/>
+          </StackPanel>
+
+          <TextBlock Text="{Binding AuthError}" Foreground="{StaticResource RedDanger}" FontSize="12" TextWrapping="Wrap"
+                     IsVisible="{Binding AuthError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+          <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Cancel" Command="{Binding CloseAuthDialogCommand}" Classes="secondary"/>
+            <Button Content="Connect &amp; Authenticate" Command="{Binding SubmitAuthenticationCommand}"
+                    IsEnabled="{Binding !IsAuthenticating}" Classes="primary"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+
+    <!-- Modal Dialog: Add Manual Device -->
+    <Border Background="#CC000000" IsVisible="{Binding IsAddDialogOpen}"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+      <Border Classes="card" Width="480" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="24">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Add Device Manually" FontWeight="Bold" FontSize="18" Foreground="{StaticResource TextPrimary}"/>
+          <TextBlock Text="Specify known camera network address and service endpoint."
+                     FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+          <Grid ColumnDefinitions="3*, *" RowDefinitions="Auto">
+            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0">
+              <TextBlock Text="Host / IP Address:" FontSize="12"/>
+              <TextBox Text="{Binding ManualHost}"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBlock Text="Port:" FontSize="12"/>
+              <NumericUpDown Value="{Binding ManualPort}" Minimum="1" Maximum="65535"/>
+            </StackPanel>
+          </Grid>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="ONVIF Service Path:" FontSize="12"/>
+            <TextBox Text="{Binding ManualPath}"/>
+          </StackPanel>
+
+          <Grid ColumnDefinitions="*, *" RowDefinitions="Auto">
+            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0">
+              <TextBlock Text="Username (Optional):" FontSize="12"/>
+              <TextBox Text="{Binding ManualUsername}"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBlock Text="Password (Optional):" FontSize="12"/>
+              <TextBox Text="{Binding ManualPassword}" PasswordChar="*"/>
+            </StackPanel>
+          </Grid>
+
+          <TextBlock Text="{Binding AddError}" Foreground="{StaticResource RedDanger}" FontSize="12" TextWrapping="Wrap"
+                     IsVisible="{Binding AddError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+          <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Cancel" Command="{Binding CloseAddDialogCommand}" Classes="secondary"/>
+            <Button Content="Add Device" Command="{Binding SubmitAddManualDeviceCommand}"
+                    IsEnabled="{Binding !IsAdding}" Classes="primary"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+
+  </Grid>
+
+</UserControl>

@@ -1,0 +1,185 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CamScope.App.ViewModels"
+        xmlns:views="using:CamScope.App.Views"
+        x:Class="CamScope.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="CamScope — Surveillance &amp; Discovery Platform"
+        Width="1280" Height="820"
+        MinWidth="960" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource AppBackground}">
+
+  <Grid RowDefinitions="Auto, Auto, *">
+
+    <!-- Top Toolbar -->
+    <Border Grid.Row="0" Background="{StaticResource SurfaceBackground}"
+            BorderBrush="{StaticResource SubtleBorder}" BorderThickness="0,0,0,1"
+            Padding="16,10">
+      <Grid ColumnDefinitions="Auto, *, Auto">
+
+        <!-- App Brand -->
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Border Width="28" Height="28" CornerRadius="6" Background="{StaticResource CyanAccent}">
+            <TextBlock Text="CS" Foreground="#090D16" FontWeight="Bold" FontSize="13"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="CamScope" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock Text="Discover. Connect. Monitor." FontSize="10" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </StackPanel>
+
+        <!-- Center Status Badges -->
+        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12" VerticalAlignment="Center">
+          <!-- Interface Badge -->
+          <Border Classes="badgeCyan" ToolTip.Tip="Selected Local Interface">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="NET:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="{Binding SelectedInterfaceText}" FontSize="11" Foreground="{StaticResource TextPrimary}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Discovery Status Badge -->
+          <Border Classes="badgeViolet">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="DISCOVERY:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource VioletAccent}"/>
+              <TextBlock Text="{Binding DiscoveryStateText}" FontSize="11" Foreground="{StaticResource TextPrimary}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Demo Mode Badge -->
+          <Border Classes="badgeWarning" IsVisible="{Binding IsDemoModeEnabled}">
+            <TextBlock Text="DEMO MODE ACTIVE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+          </Border>
+        </StackPanel>
+
+        <!-- Right Controls -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <!-- Demo Mode Toggle -->
+          <CheckBox Content="Demo Mode" IsChecked="{Binding IsDemoModeEnabled}"
+                    FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+          <!-- Theme Toggle Button -->
+          <ToggleButton Content="Dark / Light" IsChecked="{Binding IsDarkTheme}"
+                        Classes="secondary" FontSize="11" Padding="8,4"/>
+        </StackPanel>
+
+      </Grid>
+    </Border>
+
+    <!-- Notification / Warning Banner -->
+    <Border Grid.Row="1" Background="#1E293B" BorderBrush="{StaticResource AmberWarning}"
+            BorderThickness="0,0,0,1" Padding="14,8"
+            IsVisible="{Binding HasNotification}">
+      <Grid ColumnDefinitions="*, Auto">
+        <TextBlock Grid.Column="0" Text="{Binding NotificationText}"
+                   Foreground="{StaticResource AmberWarning}" FontSize="12" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissNotificationCommand}"
+                Classes="secondary" Padding="8,2" FontSize="11"/>
+      </Grid>
+    </Border>
+
+    <!-- Main Workspace -->
+    <Grid Grid.Row="2" ColumnDefinitions="220, *">
+
+      <!-- Persistent Sidebar Navigation -->
+      <Border Grid.Column="0" Background="{StaticResource SurfaceBackground}"
+              BorderBrush="{StaticResource SubtleBorder}" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="*, Auto">
+
+          <!-- Nav Items List -->
+          <ListBox Grid.Row="0" SelectedIndex="{Binding SelectedNavigationIndex}"
+                   Background="Transparent" BorderThickness="0" Margin="4,8">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="2"/>
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Overview" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Discover Devices" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Camera Inventory" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Live Monitoring" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Recordings" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Network Interfaces" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Device Groups" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Health &amp; Diagnostics" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Activity Audit" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
+              <TextBlock Text="Settings" FontSize="13"/>
+            </ListBoxItem>
+          </ListBox>
+
+          <!-- Sidebar Footer -->
+          <Border Grid.Row="1" Padding="12" BorderBrush="{StaticResource SubtleBorder}" BorderThickness="0,1,0,0">
+            <StackPanel Spacing="2">
+              <TextBlock Text="CamScope Desktop v1.0" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+              <TextBlock Text=".NET 10 LTS • Avalonia 11" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+            </StackPanel>
+          </Border>
+
+        </Grid>
+      </Border>
+
+      <!-- Active Content View -->
+      <Border Grid.Column="1" Background="{StaticResource AppBackground}" Padding="20">
+        <ContentControl Content="{Binding CurrentPage}">
+          <ContentControl.DataTemplates>
+            <DataTemplate DataType="{x:Type vm:OverviewViewModel}">
+              <views:OverviewView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DiscoveryViewModel}">
+              <views:DiscoveryView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:InventoryViewModel}">
+              <views:InventoryView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:LiveMonitoringViewModel}">
+              <views:LiveMonitoringView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:RecordingsViewModel}">
+              <views:RecordingsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:NetworkInterfacesViewModel}">
+              <views:NetworkInterfacesView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DeviceGroupsViewModel}">
+              <views:DeviceGroupsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DiagnosticsViewModel}">
+              <views:DiagnosticsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AuditLogViewModel}">
+              <views:AuditLogView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+              <views:SettingsView />
+            </DataTemplate>
+          </ContentControl.DataTemplates>
+        </ContentControl>
+      </Border>
+
+    </Grid>
+
+  </Grid>
+
+</Window>

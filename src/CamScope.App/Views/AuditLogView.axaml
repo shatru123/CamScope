@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.AuditLogView"
+             x:DataType="vm:AuditLogViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <Grid ColumnDefinitions="*, Auto">
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="Activity &amp; Security Audit" Classes="pageHeader"/>
+          <TextBlock Text="Immutable log of network discoveries, authentication attempts, device modifications, and exports" Classes="pageSubHeader"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+          <Button Content="Export Audit Log" Command="{Binding ExportAuditLogCommand}" Classes="secondary"/>
+          <Button Content="Clear Audit Trail" Command="{Binding ClearLogsCommand}" Classes="danger"/>
+        </StackPanel>
+      </Grid>
+
+      <TextBlock Text="{Binding FeedbackMessage}" FontSize="12" Foreground="{StaticResource CyanAccent}"
+                 IsVisible="{Binding FeedbackMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+      <Border Classes="card" Padding="0">
+        <DataGrid ItemsSource="{Binding Logs}" AutoGenerateColumns="False" IsReadOnly="True"
+                  GridLinesVisibility="Horizontal" Background="Transparent">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Timestamp (UTC)" Binding="{Binding TimestampUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="1.5*"/>
+            <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="1.5*"/>
+            <DataGridTextColumn Header="Target Endpoint" Binding="{Binding TargetEndpoint}" Width="2*"/>
+            <DataGridCheckBoxColumn Header="Success" Binding="{Binding Succeeded}" Width="0.8*"/>
+            <DataGridTextColumn Header="User / Source" Binding="{Binding UserOrSource}" Width="1.2*"/>
+            <DataGridTextColumn Header="Sanitized Details" Binding="{Binding Details}" Width="3*"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

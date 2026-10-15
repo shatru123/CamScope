@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <Grid ColumnDefinitions="*, Auto">
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="Application Settings" Classes="pageHeader"/>
+          <TextBlock Text="Configure discovery engine timeouts, live feed streaming limits, and demo mode" Classes="pageSubHeader"/>
+        </StackPanel>
+        <Button Grid.Column="1" Content="Save Changes" Command="{Binding SaveSettingsCommand}"
+                Classes="primary" VerticalAlignment="Top"/>
+      </Grid>
+
+      <TextBlock Text="{Binding FeedbackMessage}" FontSize="12" Foreground="{StaticResource CyanAccent}"
+                 IsVisible="{Binding FeedbackMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+      <!-- Demo Mode Settings Card -->
+      <Border Classes="card">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Evaluation &amp; Demonstration Mode" Classes="cardTitle"/>
+          <TextBlock Text="When Demo Mode is enabled, CamScope generates realistic synthetic surveillance cameras for UI evaluation. No actual network sockets are scanned or accessed."
+                     FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+
+          <CheckBox Content="Enable Demo Mode (Evaluate without physical IP cameras)"
+                    IsChecked="{Binding IsDemoModeEnabled}" FontWeight="SemiBold"/>
+        </StackPanel>
+      </Border>
+
+      <!-- Discovery Engine Limits -->
+      <Border Classes="card">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Network Discovery Engine" Classes="cardTitle"/>
+
+          <Grid ColumnDefinitions="240, *" RowDefinitions="Auto, Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Discovery Timeout (seconds):" FontSize="12" VerticalAlignment="Center"/>
+            <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding DiscoveryTimeoutSeconds}" Minimum="3" Maximum="30" Width="140" HorizontalAlignment="Left"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Parallel Live Streams:" FontSize="12" VerticalAlignment="Center" Margin="0,12,0,0"/>
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding MaxParallelStreams}" Minimum="1" Maximum="16" Width="140" HorizontalAlignment="Left" Margin="0,12,0,0"/>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- Stream Reconnection & Persistence -->
+      <Border Classes="card">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Resilience &amp; Audit Retention" Classes="cardTitle"/>
+
+          <CheckBox Content="Automatically reconnect lost streams with exponential backoff (up to 30s)"
+                    IsChecked="{Binding AutoReconnectStreams}"/>
+
+          <Grid ColumnDefinitions="240, *" Margin="0,8,0,0">
+            <TextBlock Grid.Column="0" Text="Retain Audit Log History (days):" FontSize="12" VerticalAlignment="Center"/>
+            <NumericUpDown Grid.Column="1" Value="{Binding RetainAuditDays}" Minimum="7" Maximum="365" Width="140" HorizontalAlignment="Left"/>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

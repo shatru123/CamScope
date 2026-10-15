@@ -1,0 +1,137 @@
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
+using CamScope.App.ViewModels;
+using CamScope.App.Views;
+using CamScope.Application.Services;
+using CamScope.CameraProtocols.Onvif;
+using CamScope.Core.Interfaces;
+using CamScope.Discovery.Engine;
+using CamScope.Infrastructure.Logging;
+using CamScope.Infrastructure.Network;
+using CamScope.Infrastructure.Security;
+using CamScope.Persistence;
+using CamScope.Persistence.Repositories;
+using CamScope.Persistence.Services;
+using CamScope.Streaming;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace CamScope.App;
+
+public partial class App : Avalonia.Application
+{
+    private ServiceProvider? _serviceProvider;
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
+
+    public override void OnFrameworkInitializationCompleted()
+    {
+        var services = new ServiceCollection();
+        ConfigureServices(services);
+
+        _serviceProvider = services.BuildServiceProvider();
+
+        // Initialize Database
+        var dbInit = _serviceProvider.GetRequiredService<DatabaseInitializer>();
+        dbInit.Initialize();
+
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            var mainVm = _serviceProvider.GetRequiredService<MainWindowViewModel>();
+            desktop.MainWindow = new MainWindow
+            {
+                DataContext = mainVm
+            };
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void ConfigureServices(IServiceCollection services)
+    {
+        // Logging
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Information);
+        });
+
+        // Persistence (SQLite)
+        var connectionString = DatabaseInitializer.CreateDefaultConnectionString();
+        services.AddSingleton(new DatabaseInitializer(connectionString));
+        services.AddSingleton<IDeviceRepository>(_ => new SqliteDeviceRepository(connectionString));
+        services.AddSingleton<IAuditService>(_ => new SqliteAuditService(connectionString));
+        services.AddSingleton<ISettingsService>(_ => new SqliteSettingsService(connectionString));
+
+        // Network & Security
+        services.AddSingleton<INetworkInterfaceProvider, NetworkInterfaceProvider>();
+        services.AddSingleton<ICredentialStore, SecureCredentialStore>();
+
+        // Discovery Engines
+        services.AddSingleton<WsDiscoveryEngine>();
+        services.AddSingleton<DemoDiscoveryEngine>();
+
+        // ONVIF Client
+        services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
+        services.AddSingleton<IOnvifClient, OnvifDeviceClient>();
+
+        // Streaming Service
+        services.AddSingleton<IStreamingService, StreamingService>();
+
+        // Application Services
+        services.AddSingleton<DeviceManagementService>();
+
+        // ViewModels
+        var isDemoModeHolder = new DemoModeState();
+        services.AddSingleton(isDemoModeHolder);
+
+        services.AddSingleton<OverviewViewModel>(sp => new OverviewViewModel(
+            sp.GetRequiredService<IDeviceRepository>(),
+            sp.GetRequiredService<IAuditService>(),
+            idx => sp.GetRequiredService<MainWindowViewModel>().NavigateToIndex(idx)));
+
+        services.AddSingleton<DiscoveryViewModel>(sp => new DiscoveryViewModel(
+            sp.GetRequiredService<WsDiscoveryEngine>(),
+            sp.GetRequiredService<DemoDiscoveryEngine>(),
+            sp.GetRequiredService<INetworkInterfaceProvider>(),
+            sp.GetRequiredService<IDeviceRepository>(),
+            sp.GetRequiredService<IAuditService>(),
+            () => isDemoModeHolder.IsDemoMode));
+
+        services.AddSingleton<InventoryViewModel>(sp => new InventoryViewModel(
+            sp.GetRequiredService<IDeviceRepository>(),
+            sp.GetRequiredService<DeviceManagementService>(),
+            () => isDemoModeHolder.IsDemoMode));
+
+        services.AddSingleton<LiveMonitoringViewModel>();
+        services.AddSingleton<RecordingsViewModel>(sp => new RecordingsViewModel(
+            sp.GetRequiredService<IDeviceRepository>(),
+            sp.GetRequiredService<IOnvifClient>(),
+            sp.GetRequiredService<ICredentialStore>(),
+            () => isDemoModeHolder.IsDemoMode));
+
+        services.AddSingleton<NetworkInterfacesViewModel>();
+        services.AddSingleton<DeviceGroupsViewModel>();
+        services.AddSingleton<DiagnosticsViewModel>();
+        services.AddSingleton<AuditLogViewModel>();
+        services.AddSingleton<SettingsViewModel>(sp => new SettingsViewModel(
+            sp.GetRequiredService<ISettingsService>(),
+            enabled =>
+            {
+                isDemoModeHolder.IsDemoMode = enabled;
+                var main = sp.GetRequiredService<MainWindowViewModel>();
+                main.IsDemoModeEnabled = enabled;
+            }));
+
+        services.AddSingleton<MainWindowViewModel>();
+    }
+}
+
+public sealed class DemoModeState
+{
+    public bool IsDemoMode { get; set; }
+}

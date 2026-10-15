@@ -1,1 +1,196 @@
-# CamScope
+# CamScope — Cross-Platform Camera Discovery & Management Platform
+
+> **Discover. Connect. Monitor.**
+
+CamScope is a cross-platform desktop application designed for security operators, system administrators, and network engineers. Built with C# and **.NET 10 LTS** using **Avalonia UI**, CamScope provides local network surveillance discovery, inventory management, secure credential handling, multi-camera live monitoring, recording timeline playback, and activity audit logging.
+
+---
+
+## Technical Limitation & Scope Disclosure
+
+> [!IMPORTANT]
+> **Network discovery cannot find every physical camera nearby.**
+> Network discovery via ONVIF WS-Discovery relies on UDP multicast (`239.255.255.250:3702`). Discovery is strictly bounded by:
+> - The selected local network interface and subnet boundaries.
+> - Network switches and router multicast routing configurations (IGMP snooping).
+> - Host and local network firewall rules.
+> - Device protocol support (ONVIF WS-Discovery enabled).
+> - Access permissions and network segmentation (VLANs).
+>
+> **CamScope is not a universal covert surveillance detector.** It is a network-connected camera management platform for authorized environments.
+
+---
+
+## Key Features
+
+- **Local Network Discovery (ONVIF WS-Discovery)**
+  - Enumerates physical, wireless, and virtual network interfaces.
+  - Requires explicit user authorization confirmation before initiating discovery.
+  - Broadcasts standard ONVIF WS-Discovery Probe messages (`dn:NetworkVideoTransmitter`).
+  - Strict XML security parser protecting against XML External Entity (XXE) and XML bomb attacks.
+  - Real-time response parsing with duplicate device merging.
+  - Instant discovery cancellation.
+
+- **Explicit Authentication & Secure Credential Handling**
+  - Discovered cameras are clearly distinguished from Authenticated cameras.
+  - Explicit user-entered connection flow.
+  - Zero hardcoded passwords, zero default-password brute-forcing, and zero automatic logins.
+  - Integrated with **macOS Keychain** (`security` service) with encrypted in-memory fallback.
+  - SQLite database persists device metadata, capabilities, and tags—**passwords are strictly excluded**.
+  - Structured log output automatically redacts passwords, tokens, and RTSP secrets (`***REDACTED***`).
+
+- **Camera Inventory Management**
+  - Interactive table and card views with sorting and real-time filtering.
+  - Filter by search query, manufacturer, or connection/authentication status.
+  - Manual device entry for cameras with known IP and custom ONVIF service paths.
+  - Export inventory reports to CSV or JSON with sensitive credentials omitted.
+
+- **Multi-Camera Live Monitoring**
+  - Flexible grid matrix: Single (1x1), Quad (2x2), Matrix (3x3).
+  - Only authenticated, stream-capable cameras can be launched.
+  - Real-time frame rendering with live FPS, frame counter, and resolution badges.
+  - Resilient automatic reconnection with bounded exponential backoff (1s, 2s, 4s, 8s, up to max 30s).
+  - Clean asynchronous stream disposal and resource cleanup.
+
+- **Recordings & Playback Timeline**
+  - Search historical recording segments through camera ONVIF recording search APIs.
+  - Interactive playback timeline bar with playhead scrubber, play, pause, and time readout.
+  - **Honest capability handling**: clearly informs the user when a camera does not expose the ONVIF Recording Search service.
+
+- **Evaluation & Demonstration Mode**
+  - Easily toggleable Demo Mode for evaluating the UI without physical cameras.
+  - Generates realistic synthetic devices (Axis, Hanwha, Hikvision, Bosch, Dahua) clearly marked with `[DEMO]`.
+  - Simulates discovery progress, streaming frames, and playback segments without accessing external sockets.
+
+- **Security & Activity Audit Logging**
+  - Immutable audit trail recording discovery sessions, authentication attempts, manual additions, and exports.
+  - Export audit logs to CSV or clear audit history.
+
+---
+
+## Architecture Overview
+
+CamScope follows Clean Architecture principles with dependency injection and modular boundaries:
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   CamScope.App                         │
+│   Avalonia 11 UI, MVVM, Themes, Views & ViewModels     │
+└──────────────┬──────────────────────────┬──────────────┘
+               │                          │
+┌──────────────▼─────────────┐ ┌──────────▼──────────────┐
+│    CamScope.Application    │ │     CamScope.Streaming   │
+│ UseCases, Services, DTOs,  │ │ RTSP Client, Stream FSM,│
+│ Validation, Audit Service  │ │ Reconnect Backoff, Canvas│
+└──────┬──────────────┬──────┘ └──────────┬──────────────┘
+       │              │                   │
+┌──────▼──────┐ ┌─────▼───────────────────▼──────────────┐
+│CamScope.Core│ │         CamScope.Discovery             │
+│Domain Models│ │ ONVIF WS-Discovery (UDP Multicast 3702)│
+│Interfaces   │ │ Interface Binding, Safe XML, Dedup     │
+│Enums, Events│ └─────┬───────────────────┬──────────────┘
+       │              │                   │
+┌──────┴─────┐  ┌─────▼───────────────┐ ┌─▼──────────────┐
+│  Infrastructure│Onvif SOAP Services,│ │CamScope.Persist│
+│OS Keychain,│  │Capabilities, Auth   │ │SQLite Storage, │
+│Net Provider│  └─────────────────────┘ │Audit, Settings │
+└────────────┘                          └────────────────┘
+```
+
+| Project | Responsibility |
+| :--- | :--- |
+| `CamScope.Core` | Domain entities (`CameraDevice`), enums (`DeviceConnectionState`, `AuthenticationState`), and interfaces. |
+| `CamScope.Application` | Use cases, device management, credential redaction, demo data generator. |
+| `CamScope.Discovery` | ONVIF WS-Discovery UDP socket engine, safe XML parser, duplicate device deduplicator. |
+| `CamScope.CameraProtocols` | ONVIF SOAP client (`GetDeviceInformation`, `GetCapabilities`, `GetStreamUri`, `FindRecordings`), WS-Security UsernameToken digest. |
+| `CamScope.Streaming` | Stream lifecycle state machine, bounded backoff reconnection, pure C# synthetic test frame generator. |
+| `CamScope.Infrastructure` | Network interface enumeration, macOS Keychain credential store, redacting logger. |
+| `CamScope.Persistence` | SQLite repository, schema migrations, audit log service, settings service. |
+| `CamScope.App` | Avalonia 11 desktop application, dark charcoal/electric cyan theme, 10 view navigation shell. |
+| `CamScope.UnitTests` | Unit tests for XML parsing, XXE rejection, deduplication, redaction, security headers, backoff. |
+| `CamScope.IntegrationTests` | Integration tests for SQLite persistence, Demo mode isolation, and streaming session lifecycle. |
+
+---
+
+## Supported Platforms
+
+| Operating System | Architecture | Status |
+| :--- | :--- | :--- |
+| **macOS** | Apple Silicon (`osx-arm64`) | Supported & Verified |
+| **macOS** | Intel (`osx-x64`) | Supported |
+| **Windows** | Windows 10/11 (`win-x64`) | Supported |
+| **Linux** | Ubuntu 22.04+ / Debian (`linux-x64`) | Supported |
+
+---
+
+## Prerequisites
+
+- [.NET 10 LTS SDK](https://dotnet.microsoft.com/download) (or .NET 8 / 9 supported SDK).
+
+---
+
+## How to Build & Run on macOS
+
+### 1. Clone & Build
+```bash
+git clone https://github.com/shatru123/CamScope.git
+cd CamScope
+
+# Build the entire solution
+dotnet build CamScope.slnx
+```
+
+### 2. Run All Automated Tests
+```bash
+dotnet test CamScope.slnx --verbosity normal
+```
+
+### 3. Launch the Application
+```bash
+dotnet run --project src/CamScope.App/CamScope.App.csproj
+```
+
+---
+
+## How to Use CamScope
+
+### Evaluating in Demo Mode
+1. In the top toolbar, check the **Demo Mode** box.
+2. Navigate to **Discover Devices**, select an interface, check authorization, and click **Start WS-Discovery**.
+3. Watch the simulated camera discovery progress. Click **Add Discovered to Inventory**.
+4. Navigate to **Live Monitoring**, click **Start All Streams**, and view simulated 1080p feeds with live timestamps and motion target indicators.
+5. Navigate to **Recordings**, select a camera, pick a date, and inspect the recorded segments timeline.
+
+### Real Network Discovery
+1. In the top toolbar, ensure **Demo Mode** is unchecked.
+2. Navigate to **Discover Devices**.
+3. Select your local network adapter (e.g., `en0` Wi-Fi or Ethernet).
+4. Inspect the adapter IP and subnet.
+5. Check the required authorization box:
+   `"I confirm that I am explicitly authorized to discover surveillance devices on this network."`
+6. Click **Start WS-Discovery**.
+7. CamScope will send UDP multicast probes to `239.255.255.250:3702`, safely parse incoming ProbeMatch responses, deduplicate endpoints, and display the discovered devices in real time.
+8. Click **Add Discovered to Inventory** to save the discovered devices to your local SQLite database.
+
+### Authenticating a Camera
+1. Navigate to **Camera Inventory**.
+2. Select a device and click **Auth**.
+3. Enter the device username and password.
+4. Click **Connect & Authenticate**.
+5. CamScope contacts the ONVIF Device Management service, verifies credentials using WS-Security UsernameToken password digest, queries camera capabilities, and securely stores credentials in the macOS Keychain.
+
+---
+
+## Security & Privacy Model
+
+- **No Plaintext Passwords**: Passwords are saved only to the operating system's secure credential store (macOS Keychain) and are never stored in the SQLite database or configuration files.
+- **Redaction of Secrets**: All logging infrastructure passes through `SecretRedactor`, masking passwords, authentication headers, and RTSP credentials before output.
+- **XXE & XML Bomb Protection**: The XML parser prohibits DTD processing (`DtdProcessing.Prohibit`) and enforces a 1MB character cap to prevent denial-of-service via expansion attacks.
+- **Strict Endpoint Validation**: Only `http://` and `https://` schemes are accepted for camera service endpoints, preventing SSRF and scheme hijacking.
+- **Local Privacy**: Discovery results and telemetry are stored exclusively on the user's local machine. No cloud telemetry or feed uploading occurs.
+
+---
+
+## License
+
+This project is licensed under the MIT License.

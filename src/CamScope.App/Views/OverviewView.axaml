@@ -1,0 +1,162 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.OverviewView"
+             x:DataType="vm:OverviewViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <!-- Header -->
+      <Grid ColumnDefinitions="*, Auto">
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="System Overview" Classes="pageHeader"/>
+          <TextBlock Text="Real-time surveillance inventory telemetry and discovery status" Classes="pageSubHeader"/>
+        </StackPanel>
+        <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}"
+                Classes="secondary" VerticalAlignment="Top"/>
+      </Grid>
+
+      <!-- Key Metrics Cards -->
+      <Grid ColumnDefinitions="*, *, *, *, *, *" RowDefinitions="Auto">
+
+        <!-- Total Discovered -->
+        <Border Grid.Column="0" Classes="metricCard" Margin="0,0,8,0">
+          <StackPanel Spacing="4">
+            <TextBlock Text="TOTAL INVENTORY" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding TotalDevices}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+            <TextBlock Text="Discovered / added" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Authenticated -->
+        <Border Grid.Column="1" Classes="metricCard" Margin="4,0,8,0">
+          <StackPanel Spacing="4">
+            <TextBlock Text="AUTHENTICATED" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding AuthenticatedDevices}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource VioletAccent}"/>
+            <TextBlock Text="Verified credentials" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Reachable -->
+        <Border Grid.Column="2" Classes="metricCard" Margin="4,0,8,0">
+          <StackPanel Spacing="4">
+            <TextBlock Text="REACHABLE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding ReachableDevices}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+            <TextBlock Text="Responding to probe" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Live Stream Capable -->
+        <Border Grid.Column="3" Classes="metricCard" Margin="4,0,8,0">
+          <StackPanel Spacing="4">
+            <TextBlock Text="STREAM CAPABLE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding LiveStreamCapableDevices}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource CyanGlow}"/>
+            <TextBlock Text="RTSP / Media verified" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Recording Capable -->
+        <Border Grid.Column="4" Classes="metricCard" Margin="4,0,8,0">
+          <StackPanel Spacing="4">
+            <TextBlock Text="RECORDINGS" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding RecordingCapableDevices}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+            <TextBlock Text="Search API supported" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Offline / Error -->
+        <Border Grid.Column="5" Classes="metricCard" Margin="4,0,0,0">
+          <StackPanel Spacing="4">
+            <TextBlock Text="UNREACHABLE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding UnreachableDevices}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource RedDanger}"/>
+            <TextBlock Text="Connection timeout" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+        </Border>
+
+      </Grid>
+
+      <!-- Quick Actions -->
+      <Border Classes="card">
+        <Grid ColumnDefinitions="*, Auto, Auto, Auto">
+          <StackPanel Grid.Column="0">
+            <TextBlock Text="Surveillance Quick Actions" Classes="cardTitle"/>
+            <TextBlock Text="Initiate local network discovery or launch authenticated multi-camera live feeds" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+          </StackPanel>
+          <Button Grid.Column="1" Content="Discover Devices" Command="{Binding GoToDiscoveryCommand}"
+                  Classes="primary" Margin="0,0,8,0"/>
+          <Button Grid.Column="2" Content="Live Monitoring" Command="{Binding GoToLiveMonitoringCommand}"
+                  Classes="secondary" Margin="0,0,8,0"/>
+          <Button Grid.Column="3" Content="Camera Inventory" Command="{Binding GoToInventoryCommand}"
+                  Classes="secondary"/>
+        </Grid>
+      </Border>
+
+      <!-- Split: Recent Devices & Recent Activity -->
+      <Grid ColumnDefinitions="*, *">
+
+        <!-- Recent Devices -->
+        <Border Grid.Column="0" Classes="card" Margin="0,0,10,0">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Recent Inventory Additions" Classes="cardTitle"/>
+
+            <ItemsControl ItemsSource="{Binding RecentDevices}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="{StaticResource SubtleBorder}" BorderThickness="0,0,0,1" Padding="0,8">
+                    <Grid ColumnDefinitions="Auto, *, Auto">
+                      <Border Grid.Column="0" Width="10" Height="10" CornerRadius="5"
+                              Background="{StaticResource GreenSuccess}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                      <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="{Binding Host, StringFormat='{}{0} • ONVIF'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                      </StackPanel>
+                      <Border Grid.Column="2" Classes="badgeViolet" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding AuthState}" FontSize="10" FontWeight="Bold"/>
+                      </Border>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="No devices registered yet. Run network discovery or add manually."
+                       IsVisible="{Binding !RecentDevices.Count}"
+                       Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Recent Audit Events -->
+        <Border Grid.Column="1" Classes="card" Margin="10,0,0,0">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Recent Security &amp; Activity Audit" Classes="cardTitle"/>
+
+            <ItemsControl ItemsSource="{Binding RecentEvents}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="{StaticResource SubtleBorder}" BorderThickness="0,0,0,1" Padding="0,8">
+                    <Grid ColumnDefinitions="*, Auto">
+                      <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding Action}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Text="{Binding TimestampUtc, StringFormat='{}{0:HH:mm:ss}'}"
+                                 FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="No activity recorded in audit trail yet."
+                       IsVisible="{Binding !RecentEvents.Count}"
+                       Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8"/>
+          </StackPanel>
+        </Border>
+
+      </Grid>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

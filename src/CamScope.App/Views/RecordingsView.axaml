@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.RecordingsView"
+             x:DataType="vm:RecordingsViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <!-- Header -->
+      <StackPanel>
+        <TextBlock Text="Recordings &amp; Playback" Classes="pageHeader"/>
+        <TextBlock Text="Search historical recording segments via device ONVIF search interfaces and replay streams" Classes="pageSubHeader"/>
+      </StackPanel>
+
+      <!-- Search Controls -->
+      <Border Classes="card">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Recording Search Parameters" Classes="cardTitle"/>
+
+          <Grid ColumnDefinitions="*, *, Auto">
+            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,12,0">
+              <TextBlock Text="Select Camera:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <ComboBox ItemsSource="{Binding AvailableDevices}" SelectedItem="{Binding SelectedDevice}"
+                        HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding DisplayName}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Spacing="4" Margin="0,0,12,0">
+              <TextBlock Text="Target Date:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <DatePicker SelectedDate="{Binding SearchDate}" HorizontalAlignment="Stretch"/>
+            </StackPanel>
+
+            <Button Grid.Column="2" Content="Search Recordings" Command="{Binding SearchRecordingsCommand}"
+                    Classes="primary" VerticalAlignment="Bottom" Height="34"/>
+          </Grid>
+
+          <!-- Unsupported Service Alert Banner -->
+          <Border Background="#1AEF4444" BorderBrush="{StaticResource RedDanger}" BorderThickness="1"
+                  CornerRadius="6" Padding="12" IsVisible="{Binding IsUnsupported}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Text="⚠️" FontSize="14" VerticalAlignment="Center"/>
+              <TextBlock Text="Playback Unavailable: The selected device does not expose the ONVIF Recording Search service. CamScope does not fabricate recording data."
+                         Foreground="{StaticResource RedDanger}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Border>
+
+          <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+        </StackPanel>
+      </Border>
+
+      <!-- Recording Segments Timeline & Results -->
+      <Border Classes="card">
+        <StackPanel Spacing="16">
+          <TextBlock Text="Recording Segments Timeline" Classes="cardTitle"/>
+
+          <!-- Interactive Timeline Scrub Bar -->
+          <Border Background="#090D16" CornerRadius="6" Padding="14">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="Auto, *, Auto">
+                <TextBlock Grid.Column="0" Text="00:00:00" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                <TextBlock Grid.Column="1" Text="{Binding PlaybackTimeText}" FontSize="13" FontWeight="Bold"
+                           Foreground="{StaticResource CyanAccent}" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="24:00:00" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+              </Grid>
+
+              <Slider Value="{Binding PlayheadPosition}" Minimum="0" Maximum="100"/>
+
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
+                <Button Content="Play" Command="{Binding PlayCommand}" Classes="primary" IsEnabled="{Binding !IsPlaying}"/>
+                <Button Content="Pause" Command="{Binding PauseCommand}" Classes="secondary" IsEnabled="{Binding IsPlaying}"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- Segments List -->
+          <ItemsControl ItemsSource="{Binding Segments}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{StaticResource SurfaceBackground}" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                        BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1">
+                  <Grid ColumnDefinitions="*, Auto, Auto">
+                    <StackPanel Grid.Column="0" Spacing="2">
+                      <TextBlock Text="{Binding TrackName, FallbackValue='Recording Track'}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimary}"/>
+                      <TextBlock Text="{Binding StartTimeUtc, StringFormat='Start: {0:yyyy-MM-dd HH:mm:ss UTC}'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                      <TextBlock Text="{Binding EndTimeUtc, StringFormat='End: {0:yyyy-MM-dd HH:mm:ss UTC}'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    </StackPanel>
+
+                    <Border Grid.Column="1" Classes="badgeCyan" VerticalAlignment="Center" Margin="0,0,12,0">
+                      <TextBlock Text="{Binding Duration, StringFormat='Duration: {0:hh\\:mm\\:ss}'}" FontSize="11" FontWeight="Bold"/>
+                    </Border>
+
+                    <Button Grid.Column="2" Content="Select" Classes="secondary" VerticalAlignment="Center"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="No recording segments indexed. Run search above."
+                     IsVisible="{Binding !Segments.Count}"
+                     Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8"/>
+
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

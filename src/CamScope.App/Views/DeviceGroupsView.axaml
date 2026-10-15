@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.DeviceGroupsView"
+             x:DataType="vm:DeviceGroupsViewModel">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="20">
+
+      <Grid ColumnDefinitions="*, Auto">
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="Device Groups &amp; Topology" Classes="pageHeader"/>
+          <TextBlock Text="Hierarchical breakdown of inventory by physical location and manufacturer" Classes="pageSubHeader"/>
+        </StackPanel>
+        <Button Grid.Column="1" Content="Refresh Groups" Command="{Binding LoadGroupsCommand}"
+                Classes="secondary" VerticalAlignment="Top"/>
+      </Grid>
+
+      <Border Classes="card">
+        <TreeView ItemsSource="{Binding Groupings}" Background="Transparent">
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate ItemsSource="{Binding Children}">
+              <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{StaticResource TextPrimary}" Margin="0,3"/>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             x:Class="CamScope.App.Views.LiveMonitoringView"
+             x:DataType="vm:LiveMonitoringViewModel">
+
+  <Grid RowDefinitions="Auto, *">
+
+    <!-- Top Toolbar -->
+    <Border Grid.Row="0" Classes="card" Margin="0,0,0,16" Padding="12">
+      <Grid ColumnDefinitions="Auto, *, Auto">
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="Grid Layout:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <Button Content="1x1 Single" Command="{Binding SetLayoutCommand}" CommandParameter="1" Classes="secondary"/>
+          <Button Content="2x2 Quad" Command="{Binding SetLayoutCommand}" CommandParameter="4" Classes="secondary"/>
+          <Button Content="3x3 Matrix" Command="{Binding SetLayoutCommand}" CommandParameter="9" Classes="secondary"/>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+          <Button Content="Start All Streams" Command="{Binding StartAllCommand}" Classes="primary"/>
+          <Button Content="Stop All" Command="{Binding StopAllCommand}" Classes="danger"/>
+        </StackPanel>
+
+      </Grid>
+    </Border>
+
+    <!-- Multi-Camera Grid Viewport -->
+    <ItemsControl Grid.Row="1" ItemsSource="{Binding Cells}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Rows="2" Columns="2"/>
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="vm:LiveCellViewModel">
+          <Border Classes="card" Margin="4" Padding="8" Background="{StaticResource SurfaceBackground}">
+            <Grid RowDefinitions="Auto, *, Auto">
+
+              <!-- Cell Header -->
+              <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,6">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                  <ComboBox ItemsSource="{Binding ((vm:LiveMonitoringViewModel)DataContext).AuthenticatedCameras, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            SelectedItem="{Binding Device}" Width="200" PlaceholderText="Select Camera...">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding DisplayName}"/>
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <TextBlock Text="{Binding Device.Host, StringFormat='({0})'}"
+                             FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <Border Classes="badgeSuccess" IsVisible="{Binding IsStreaming}">
+                    <TextBlock Text="LIVE" FontSize="10" FontWeight="Bold"/>
+                  </Border>
+                  <Border Classes="badgeWarning" IsVisible="{Binding !IsStreaming}">
+                    <TextBlock Text="{Binding State}" FontSize="10" FontWeight="Bold"/>
+                  </Border>
+                </StackPanel>
+              </Grid>
+
+              <!-- Video Viewport / Canvas -->
+              <Border Grid.Row="1" Background="#050811" CornerRadius="6" ClipToBounds="True">
+                <Grid>
+                  <!-- Active Video Frame -->
+                  <Image Source="{Binding CurrentBitmap}" Stretch="Uniform"
+                         IsVisible="{Binding CurrentBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                  <!-- Empty / Idle Placeholder -->
+                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                              IsVisible="{Binding CurrentBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                    <TextBlock Text="No Live Feed" FontWeight="Bold" FontSize="14" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding ErrorMessage}" FontSize="11" Foreground="{StaticResource RedDanger}" HorizontalAlignment="Center"
+                               IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <!-- Cell Footer Controls -->
+              <Grid Grid.Row="2" ColumnDefinitions="Auto, *, Auto" Margin="0,6,0,0">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Fps, StringFormat='FPS: {0:F1}'}" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+                  <TextBlock Text="{Binding Resolution}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                  <Button Content="Start" Command="{Binding StartCommand}" IsVisible="{Binding !IsStreaming}" Classes="primary" Padding="8,3" FontSize="11"/>
+                  <Button Content="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsStreaming}" Classes="secondary" Padding="8,3" FontSize="11"/>
+                </StackPanel>
+              </Grid>
+
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+  </Grid>
+
+</UserControl>
