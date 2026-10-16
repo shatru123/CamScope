@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -53,7 +55,12 @@ public sealed class NetworkInterfaceProvider : INetworkInterfaceProvider
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to enumerate network interfaces");
+            _logger.LogDebug(ex, "System network enumeration failed; attempting fallback via ifconfig");
+        }
+
+        if (result.Count == 0)
+        {
+            TryEnumerateViaIfconfig(result);
         }
 
         if (result.Count == 0)
@@ -70,10 +77,75 @@ public sealed class NetworkInterfaceProvider : INetworkInterfaceProvider
             });
         }
 
-        // Sort: physical/wifi interfaces first, loopback last
+        // Sort: physical/wifi interfaces first (non-127.x), loopback last
         return result
             .OrderBy(i => i.IPv4Address.StartsWith("127."))
             .ThenBy(i => i.Name)
             .ToList();
+    }
+
+    private void TryEnumerateViaIfconfig(List<NetworkInterfaceInfo> list)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "/sbin/ifconfig",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return;
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(1000);
+
+            var lines = output.Split('\n');
+            string currentIface = "";
+            bool currentUp = false;
+
+            var ifaceHeaderRegex = new Regex(@"^([a-z0-9]+):\s*flags=\d+<([^>]+)>", RegexOptions.IgnoreCase);
+            var inetRegex = new Regex(@"inet\s+(\d+\.\d+\.\d+\.\d+)\s+netmask\s+(0x[0-9a-fA-F]+|\d+\.\d+\.\d+\.\d+)", RegexOptions.IgnoreCase);
+
+            foreach (var rawLine in lines)
+            {
+                var line = rawLine.TrimEnd();
+                var headerMatch = ifaceHeaderRegex.Match(line);
+                if (headerMatch.Success)
+                {
+                    currentIface = headerMatch.Groups[1].Value;
+                    var flags = headerMatch.Groups[2].Value;
+                    currentUp = flags.Contains("UP", StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
+
+                if (currentUp && !string.IsNullOrEmpty(currentIface))
+                {
+                    var inetMatch = inetRegex.Match(line);
+                    if (inetMatch.Success)
+                    {
+                        var ip = inetMatch.Groups[1].Value;
+                        var mask = inetMatch.Groups[2].Value;
+
+                        list.Add(new NetworkInterfaceInfo
+                        {
+                            Id = currentIface,
+                            Name = currentIface,
+                            Description = currentIface.StartsWith("en") ? "Ethernet / Wi-Fi Adapter" : "Network Interface",
+                            IPv4Address = ip,
+                            SubnetMask = mask,
+                            IsUp = true,
+                            SupportsMulticast = true
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "ifconfig fallback enumeration unavailable");
+        }
     }
 }

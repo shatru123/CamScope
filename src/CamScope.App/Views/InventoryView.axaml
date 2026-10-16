@@ -60,14 +60,14 @@
             <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="1.5*"/>
             <DataGridTemplateColumn Header="Actions" Width="1.5*">
               <DataGridTemplateColumn.CellTemplate>
-                <DataTemplate DataType="models:CameraDevice">
+                <DataTemplate DataType="models:CameraDevice" x:CompileBindings="False">
                   <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
                     <Button Content="Auth"
-                            Command="{Binding ((vm:InventoryViewModel)DataContext).OpenAuthDialogCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Command="{Binding $parent[UserControl].DataContext.OpenAuthDialogCommand}"
                             CommandParameter="{Binding}"
                             Classes="secondary" Padding="6,2" FontSize="11"/>
                     <Button Content="Del"
-                            Command="{Binding ((vm:InventoryViewModel)DataContext).DeleteDeviceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Command="{Binding $parent[UserControl].DataContext.DeleteDeviceCommand}"
                             CommandParameter="{Binding}"
                             Classes="danger" Padding="6,2" FontSize="11"/>
                   </StackPanel>

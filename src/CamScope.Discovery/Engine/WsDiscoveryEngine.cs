@@ -54,6 +54,7 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
         {
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, true);
             socket.Bind(new IPEndPoint(localIp, 0));
 
             try
@@ -64,6 +65,7 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
                     SocketOptionName.AddMembership,
                     new MulticastOption(multicastAddress, localIp));
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 4);
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
             }
             catch (Exception ex)
             {
@@ -77,11 +79,18 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
             ReportProgress(progress, DiscoveryStatus.SendingProbes, 20, "Broadcasting WS-Discovery probe packets...", 0);
 
             // Send probe 2 times spaced by 200ms to increase reliability over UDP
-            for (int i = 0; i < 2; i++)
+            try
             {
-                linkedCts.Token.ThrowIfCancellationRequested();
-                await socket.SendToAsync(probeBytes, SocketFlags.None, multicastEndpoint, linkedCts.Token);
-                await Task.Delay(200, linkedCts.Token);
+                for (int i = 0; i < 2; i++)
+                {
+                    linkedCts.Token.ThrowIfCancellationRequested();
+                    await socket.SendToAsync(probeBytes, SocketFlags.None, multicastEndpoint, linkedCts.Token);
+                    await Task.Delay(200, linkedCts.Token);
+                }
+            }
+            catch (SocketException sex)
+            {
+                _logger.LogWarning(sex, "Multicast probe broadcast warning on interface {Name}: {Message}", iface.Name, sex.Message);
             }
 
             ReportProgress(progress, DiscoveryStatus.AwaitingResponses, 40, "Awaiting responses from ONVIF devices...", 0);

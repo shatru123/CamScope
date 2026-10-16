@@ -24,9 +24,12 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _isStreaming;
     [ObservableProperty] private bool _isFullscreen;
 
-    public LiveCellViewModel(IStreamingService streamingService)
+    public ObservableCollection<CameraDevice> AvailableCameras { get; }
+
+    public LiveCellViewModel(IStreamingService streamingService, ObservableCollection<CameraDevice> availableCameras)
     {
         _streamingService = streamingService;
+        AvailableCameras = availableCameras;
     }
 
     public async Task StartAsync()
@@ -161,7 +164,7 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
         GridLayout = cellCount;
         while (Cells.Count < cellCount)
         {
-            var cell = new LiveCellViewModel(_streamingService);
+            var cell = new LiveCellViewModel(_streamingService, AuthenticatedCameras);
             Cells.Add(cell);
         }
         while (Cells.Count > cellCount)

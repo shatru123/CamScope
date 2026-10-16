@@ -41,7 +41,7 @@
               <!-- Cell Header -->
               <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,6">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                  <ComboBox ItemsSource="{Binding ((vm:LiveMonitoringViewModel)DataContext).AuthenticatedCameras, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  <ComboBox ItemsSource="{Binding AvailableCameras}"
                             SelectedItem="{Binding Device}" Width="200" PlaceholderText="Select Camera...">
                     <ComboBox.ItemTemplate>
                       <DataTemplate>
