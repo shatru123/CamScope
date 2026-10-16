@@ -361,13 +361,15 @@
 
     <!-- In-App Wi-Fi Connection Dialog -->
     <Border Background="#D0000000" IsVisible="{Binding IsConnectModalOpen}">
-      <Border Classes="card" Width="520" HorizontalAlignment="Center" VerticalAlignment="Center"
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <Border Classes="card" Width="540" MaxHeight="680"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
               Background="{StaticResource SurfaceBackground}" BorderBrush="{StaticResource BorderColor}"
-              BorderThickness="1" CornerRadius="12" Padding="24">
-        <StackPanel Spacing="16">
+              BorderThickness="1" CornerRadius="12" Padding="20" Margin="16">
+        <Grid RowDefinitions="Auto, *, Auto">
 
-          <!-- Modal Header with Explicit State Badge -->
-          <Grid ColumnDefinitions="*, Auto, Auto">
+          <!-- Modal Header with Explicit State Badge (Fixed) -->
+          <Grid Grid.Row="0" ColumnDefinitions="*, Auto, Auto" Margin="0,0,0,12">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
               <TextBlock Text="Connect to Wi-Fi Network" FontSize="16" FontWeight="SemiBold"
                          Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
@@ -378,6 +380,11 @@
             <Button Grid.Column="2" Content="✕" Command="{Binding CloseConnectModalCommand}"
                     Classes="secondary" FontSize="12" Padding="6,2" VerticalAlignment="Center"/>
           </Grid>
+
+          <!-- Scrollable Modal Body -->
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        Padding="0,0,8,0">
+            <StackPanel Spacing="14">
 
           <!-- Target Network Summary Card -->
           <Border Background="#101C2E" BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1"
@@ -619,29 +626,36 @@
             </StackPanel>
           </Border>
 
-          <!-- Modal Action Buttons -->
-          <Grid ColumnDefinitions="Auto, *, Auto, Auto" Margin="0,8,0,0">
-            <Button Grid.Column="0" Content="macOS Settings..." Command="{Binding OpenSystemSettingsCommand}"
-                    Classes="secondary" FontSize="11" Padding="8,4"/>
-            <Button Grid.Column="2" Content="Cancel" Command="{Binding CloseConnectModalCommand}"
-                    Classes="secondary" Margin="0,0,8,0"/>
-            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
-              <!-- In-flight Cancel Button -->
-              <Button Content="Stop Connecting" Command="{Binding CancelConnectWifiCommand}"
-                      Classes="danger" IsVisible="{Binding IsConnectingWifi}"/>
-
-              <!-- Retry Button (Shown on retryable failure) -->
-              <Button Content="Retry Connection" Command="{Binding RetryConnectWifiCommand}"
-                      Classes="primary" IsVisible="{Binding CanRetry}" IsEnabled="{Binding !IsConnectingWifi}"/>
-
-              <!-- Standard Connect Button (Shown when not in retry state and not connecting) -->
-              <Button Content="Connect" Command="{Binding ConnectWifiAsyncCommand}"
-                      Classes="primary" IsVisible="{Binding !CanRetry}" IsEnabled="{Binding !IsConnectingWifi}"/>
-            </StackPanel>
-          </Grid>
-
         </StackPanel>
+      </ScrollViewer>
+
+          <!-- Modal Action Buttons (Fixed at Bottom) -->
+          <Border Grid.Row="2" BorderBrush="{StaticResource SubtleBorder}" BorderThickness="0,1,0,0"
+                  Padding="0,12,0,0" Margin="0,8,0,0">
+            <Grid ColumnDefinitions="Auto, *, Auto, Auto">
+              <Button Grid.Column="0" Content="macOS Settings..." Command="{Binding OpenSystemSettingsCommand}"
+                      Classes="secondary" FontSize="11" Padding="8,4"/>
+              <Button Grid.Column="2" Content="Cancel" Command="{Binding CloseConnectModalCommand}"
+                      Classes="secondary" Margin="0,0,8,0"/>
+              <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                <!-- In-flight Cancel Button -->
+                <Button Content="Stop Connecting" Command="{Binding CancelConnectWifiCommand}"
+                        Classes="danger" IsVisible="{Binding IsConnectingWifi}"/>
+
+                <!-- Retry Button (Shown on retryable failure) -->
+                <Button Content="Retry Connection" Command="{Binding RetryConnectWifiCommand}"
+                        Classes="primary" IsVisible="{Binding CanRetry}" IsEnabled="{Binding !IsConnectingWifi}"/>
+
+                <!-- Standard Connect Button (Bound to ConnectWifiCommand) -->
+                <Button Content="Connect" Command="{Binding ConnectWifiCommand}"
+                        Classes="primary" IsVisible="{Binding !CanRetry}" IsEnabled="{Binding !IsConnectingWifi}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+        </Grid>
       </Border>
+      </ScrollViewer>
     </Border>
 
   </Grid>
