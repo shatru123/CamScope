@@ -185,7 +185,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public void OpenPhone() => OpenUrl("tel:+919604466334");
 
     [RelayCommand]
-    public void OpenGitHub() => OpenUrl("https://github.com/shatru123/Learning");
+    public void OpenGitHub() => OpenUrl("https://github.com/shatru123/CamScope");
 
     [RelayCommand]
     public void OpenPhoto()
@@ -197,14 +197,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var sourcePath = "/Users/shatrughnaambhore/Shatru/Learning/Projects/DriveMate/shatrughna.jpg";
+        var sourcePath = "/Users/shatrughnaambhore/Shatru/Learning/Projects/CamScope/src/CamScope.App/Assets/images/shatrughna.jpg";
         if (File.Exists(sourcePath))
         {
             OpenUrl(sourcePath);
             return;
         }
 
-        OpenUrl("https://github.com/shatru123");
+        OpenUrl("https://github.com/shatru123/CamScope");
     }
 
     private static void OpenUrl(string url)

@@ -149,17 +149,20 @@
                           IsReadOnly="True"
                           GridLinesVisibility="Horizontal"
                           CanUserSortColumns="True"
+                          CanUserResizeColumns="True"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
                           Background="Transparent"
                           MinHeight="360">
                   <DataGrid.Columns>
-                    <DataGridTextColumn Header="Signal" Binding="{Binding SignalText}" Width="1.2*"/>
-                    <DataGridTextColumn Header="SSID" Binding="{Binding DisplaySsid}" Width="2*"/>
-                    <DataGridTextColumn Header="BSSID (MAC)" Binding="{Binding DisplayBssid}" Width="1.8*"/>
-                    <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="0.8*"/>
-                    <DataGridTextColumn Header="Band" Binding="{Binding BandGroup}" Width="1*"/>
-                    <DataGridTextColumn Header="PHY Mode" Binding="{Binding PhyMode}" Width="1.1*"/>
-                    <DataGridTextColumn Header="Security Standard" Binding="{Binding SecurityStandard}" Width="1.6*"/>
-                    <DataGridTemplateColumn Header="WPS" Width="0.9*">
+                    <DataGridTextColumn Header="Signal" Binding="{Binding SignalText}" Width="105" MinWidth="90"/>
+                    <DataGridTextColumn Header="SSID" Binding="{Binding DisplaySsid}" Width="220" MinWidth="150"/>
+                    <DataGridTextColumn Header="BSSID (MAC)" Binding="{Binding DisplayBssid}" Width="160" MinWidth="140"/>
+                    <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="95" MinWidth="80"/>
+                    <DataGridTextColumn Header="Band" Binding="{Binding BandGroup}" Width="90" MinWidth="75"/>
+                    <DataGridTextColumn Header="PHY Mode" Binding="{Binding PhyMode}" Width="140" MinWidth="120"/>
+                    <DataGridTextColumn Header="Security Standard" Binding="{Binding SecurityStandard}" Width="200" MinWidth="160"/>
+                    <DataGridTemplateColumn Header="WPS" Width="75" MinWidth="60">
                       <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="models:WifiAccessPointObservation">
                           <TextBlock Text="{Binding SupportsWps, StringFormat='{}{0}'}"
@@ -168,7 +171,7 @@
                         </DataTemplate>
                       </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Header="Actions" Width="2*">
+                    <DataGridTemplateColumn Header="Actions" Width="220" MinWidth="200">
                       <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="models:WifiAccessPointObservation" x:CompileBindings="False">
                           <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="4,0">
@@ -235,12 +238,14 @@
                             AutoGenerateColumns="False"
                             IsReadOnly="True"
                             GridLinesVisibility="Horizontal"
+                            CanUserResizeColumns="True"
+                            HorizontalScrollBarVisibility="Auto"
                             Background="Transparent">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="1*"/>
-                      <DataGridTextColumn Header="Band" Binding="{Binding Band}" Width="1.5*"/>
-                      <DataGridTextColumn Header="Observed APs" Binding="{Binding AccessPointCount}" Width="1.5*"/>
-                      <DataGridCheckBoxColumn Header="Non-Standard Overlap Warning" Binding="{Binding IsNonStandard24Ghz}" Width="2*"/>
+                      <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="100" MinWidth="80"/>
+                      <DataGridTextColumn Header="Band" Binding="{Binding Band}" Width="120" MinWidth="100"/>
+                      <DataGridTextColumn Header="Observed APs" Binding="{Binding AccessPointCount}" Width="140" MinWidth="110"/>
+                      <DataGridCheckBoxColumn Header="Non-Standard Overlap Warning" Binding="{Binding IsNonStandard24Ghz}" Width="240" MinWidth="180"/>
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
@@ -260,11 +265,13 @@
                             AutoGenerateColumns="False"
                             IsReadOnly="True"
                             GridLinesVisibility="Horizontal"
+                            CanUserResizeColumns="True"
+                            HorizontalScrollBarVisibility="Auto"
                             Background="Transparent">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="Session Timestamp (UTC)" Binding="{Binding ScannedAtUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="2*"/>
-                      <DataGridTextColumn Header="Networks Discovered" Binding="{Binding TotalNetworksFound}" Width="1.5*"/>
-                      <DataGridTextColumn Header="Security Posture" Binding="{Binding OverallPosture}" Width="2*"/>
+                      <DataGridTextColumn Header="Session Timestamp (UTC)" Binding="{Binding ScannedAtUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="220" MinWidth="180"/>
+                      <DataGridTextColumn Header="Networks Discovered" Binding="{Binding TotalNetworksFound}" Width="180" MinWidth="140"/>
+                      <DataGridTextColumn Header="Security Posture" Binding="{Binding OverallPosture}" Width="220" MinWidth="180"/>
                     </DataGrid.Columns>
                   </DataGrid>
                 </StackPanel>
