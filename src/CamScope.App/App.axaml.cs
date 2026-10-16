@@ -15,6 +15,7 @@ using CamScope.Persistence;
 using CamScope.Persistence.Repositories;
 using CamScope.Persistence.Services;
 using CamScope.Streaming;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -75,6 +76,24 @@ public partial class App : Avalonia.Application
         services.AddSingleton<INetworkInventoryService, NetworkInventoryService>();
         services.AddSingleton<ISubnetScanner, SubnetScanner>();
         services.AddSingleton<ICredentialStore, SecureCredentialStore>();
+
+        // Wi-Fi Network Manager
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            services.AddSingleton<IWifiNetworkManager, MacWifiNetworkManager>();
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            services.AddSingleton<IWifiNetworkManager, LinuxWifiNetworkManager>();
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            services.AddSingleton<IWifiNetworkManager, WindowsWifiNetworkManager>();
+        }
+        else
+        {
+            services.AddSingleton<IWifiNetworkManager, UnsupportedPlatformWifiNetworkManager>();
+        }
 
         // Discovery Engines
         services.AddSingleton<WsDiscoveryEngine>();

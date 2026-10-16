@@ -9,6 +9,8 @@ public sealed class NetworkSelectionService : INetworkSelectionService
     private readonly ILogger<NetworkSelectionService> _logger;
     private readonly object _lock = new();
     private NetworkInterfaceInfo? _currentScanningInterface;
+    private NetworkInterfaceInfo? _cctvInterface;
+    private WifiConnectionInfo? _currentCctvWifiConnection;
 
     public NetworkInterfaceInfo? CurrentScanningInterface
     {
@@ -28,7 +30,44 @@ public sealed class NetworkSelectionService : INetworkSelectionService
         }
     }
 
+    public NetworkInterfaceInfo? CctvInterface
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _cctvInterface;
+            }
+        }
+        private set
+        {
+            lock (_lock)
+            {
+                _cctvInterface = value;
+            }
+        }
+    }
+
+    public WifiConnectionInfo? CurrentCctvWifiConnection
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _currentCctvWifiConnection;
+            }
+        }
+        private set
+        {
+            lock (_lock)
+            {
+                _currentCctvWifiConnection = value;
+            }
+        }
+    }
+
     public event Action<NetworkInterfaceInfo?>? SelectionChanged;
+    public event Action<NetworkInterfaceInfo?>? CctvInterfaceChanged;
 
     public NetworkSelectionService(ILogger<NetworkSelectionService> logger)
     {
@@ -60,6 +99,34 @@ public sealed class NetworkSelectionService : INetworkSelectionService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error notifying SelectionChanged listeners");
+        }
+    }
+
+    public void SetCctvInterface(NetworkInterfaceInfo? iface, WifiConnectionInfo? connection = null)
+    {
+        lock (_lock)
+        {
+            _cctvInterface = iface;
+            _currentCctvWifiConnection = connection;
+        }
+
+        if (iface != null)
+        {
+            _logger.LogInformation("Dedicated CCTV interface set: {Name} ({Ip}) [{Port}] - SSID: {Ssid}",
+                iface.Name, iface.IPv4Address, iface.HardwarePort, connection?.Ssid ?? "N/A");
+        }
+        else
+        {
+            _logger.LogInformation("Dedicated CCTV interface cleared");
+        }
+
+        try
+        {
+            CctvInterfaceChanged?.Invoke(iface);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error notifying CctvInterfaceChanged listeners");
         }
     }
 }

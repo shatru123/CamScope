@@ -22,7 +22,7 @@
 
         <!-- Primary Connection Protection Banner (Green Card) -->
         <Border Classes="card" Background="#0D1F17" BorderBrush="{StaticResource GreenSuccess}" BorderThickness="1">
-          <Grid RowDefinitions="Auto, Auto, Auto" ColumnDefinitions="Auto, *">
+          <Grid RowDefinitions="Auto, Auto, Auto, Auto" ColumnDefinitions="Auto, *">
             <Border Grid.Row="0" Grid.Column="0" Classes="badgeSuccess" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Text="✓ INTERNET CONNECTION PROTECTED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
             </Border>
@@ -74,6 +74,23 @@
                   <TextBlock Text="ROUTING MUTATION DETECTED" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
                 </Border>
                 <TextBlock Grid.Column="1" Text="{Binding RoutingStabilityText}"
+                           FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+              </Grid>
+            </Border>
+
+            <!-- Dedicated CCTV Route Status Banner -->
+            <Border Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,0" Padding="10,8" CornerRadius="6"
+                    Background="#0D1E30" BorderBrush="{StaticResource CyanAccent}" BorderThickness="1">
+              <Grid ColumnDefinitions="Auto, *">
+                <Border Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"
+                        Classes="badgeCyan" IsVisible="{Binding HasCctvConnection}">
+                  <TextBlock Text="CCTV DEDICATED ROUTE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                </Border>
+                <Border Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"
+                        Classes="badgeMuted" IsVisible="{Binding !HasCctvConnection}">
+                  <TextBlock Text="CCTV APP-SCOPED" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                </Border>
+                <TextBlock Grid.Column="1" Text="{Binding CctvStatusText}"
                            FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
               </Grid>
             </Border>
@@ -160,14 +177,19 @@
                 <DataGridTextColumn Header="Gateway" Binding="{Binding GatewayAddress}" Width="1.3*"/>
                 <DataGridCheckBoxColumn Header="Multicast" Binding="{Binding SupportsMulticast}" Width="0.9*"/>
                 <DataGridCheckBoxColumn Header="Primary" Binding="{Binding IsPrimaryInternet}" Width="0.8*"/>
-                <DataGridTemplateColumn Header="Action" Width="1.6*">
+                <DataGridTemplateColumn Header="Actions" Width="2.2*">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:CompileBindings="False">
-                      <Button Content="Select for Scanning"
-                              Command="{Binding $parent[UserControl].DataContext.SelectInterfaceCommand}"
-                              CommandParameter="{Binding}"
-                              Classes="secondary" FontSize="11" Padding="8,4" Margin="2"
-                              HorizontalAlignment="Center"/>
+                      <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                        <Button Content="Select Scanning"
+                                Command="{Binding $parent[UserControl].DataContext.SelectInterfaceCommand}"
+                                CommandParameter="{Binding}"
+                                Classes="secondary" FontSize="11" Padding="8,4" Margin="2"/>
+                        <Button Content="Set CCTV"
+                                Command="{Binding $parent[UserControl].DataContext.SetAsCctvInterfaceCommand}"
+                                CommandParameter="{Binding}"
+                                Classes="secondary" FontSize="11" Padding="8,4" Margin="2"/>
+                      </StackPanel>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -181,13 +203,13 @@
 
           <!-- Left Column: Detected Wi-Fi Networks -->
           <Border Grid.Column="0" Classes="card" Margin="0,0,8,0">
-            <StackPanel Spacing="12">
+            <StackPanel Spacing="10">
               <Grid ColumnDefinitions="*, Auto">
                 <StackPanel Grid.Column="0">
-                  <TextBlock Text="Nearby Wi-Fi Environment (Informational Only)" Classes="cardTitle"/>
-                  <TextBlock Text="Read-only macOS Wi-Fi environment telemetry. Selecting an SSID will NOT switch your Mac's network. Joining is strictly an OS-level operation." FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                  <TextBlock Text="Wi-Fi Network Manager" Classes="cardTitle"/>
+                  <TextBlock Text="Scan nearby networks, filter and connect dedicated secondary adapters for CCTV discovery without disrupting primary internet." FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding WifiNetworks.Count, StringFormat='{}{0} Detected'}"
+                <TextBlock Grid.Column="1" Text="{Binding FilteredWifiNetworks.Count, StringFormat='{}{0} Available'}"
                            FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
               </Grid>
 
@@ -195,29 +217,67 @@
                          IsVisible="{Binding !IsWifiPermitted}"
                          FontSize="11" Foreground="{StaticResource AmberWarning}" TextWrapping="Wrap"/>
 
-              <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding WifiNetworks}">
+              <!-- Search Bar -->
+              <TextBox Text="{Binding WifiSearchQuery}"
+                       Watermark="Search Wi-Fi SSID or BSSID..."
+                       CornerRadius="6" VerticalContentAlignment="Center"/>
+
+              <!-- Filter and Sort Controls -->
+              <Grid ColumnDefinitions="*, *, *">
+                <StackPanel Grid.Column="0" Margin="0,0,4,0" Spacing="2">
+                  <TextBlock Text="SECURITY" FontSize="9" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                  <ComboBox ItemsSource="{Binding SecurityFilterOptions}"
+                            SelectedItem="{Binding SelectedSecurityFilter}"
+                            HorizontalAlignment="Stretch"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Margin="2,0,2,0" Spacing="2">
+                  <TextBlock Text="BAND" FontSize="9" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                  <ComboBox ItemsSource="{Binding BandFilterOptions}"
+                            SelectedItem="{Binding SelectedBandFilter}"
+                            HorizontalAlignment="Stretch"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Margin="4,0,0,0" Spacing="2">
+                  <TextBlock Text="SORT" FontSize="9" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                  <ComboBox ItemsSource="{Binding SortOptions}"
+                            SelectedItem="{Binding SelectedSortOption}"
+                            HorizontalAlignment="Stretch"/>
+                </StackPanel>
+              </Grid>
+
+              <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding FilteredWifiNetworks}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:CompileBindings="False">
                       <Border Background="#161E2E" BorderBrush="{StaticResource SubtleBorder}"
                               BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
                         <Grid ColumnDefinitions="*, Auto">
-                          <StackPanel Grid.Column="0" Spacing="3">
+                          <StackPanel Grid.Column="0" Spacing="4">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                               <TextBlock Text="{Binding Ssid}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
                               <Border Classes="badgeSuccess" IsVisible="{Binding IsCurrent}">
-                                <TextBlock Text="Connected" FontSize="9" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                                <TextBlock Text="Primary Internet" FontSize="9" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                              </Border>
+                              <Border Classes="badgeViolet">
+                                <TextBlock Text="{Binding BandGroup}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource VioletAccent}"/>
+                              </Border>
+                              <Border Classes="badgeCyan" IsVisible="{Binding !IsSecured}">
+                                <TextBlock Text="Open" FontSize="9" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
                               </Border>
                             </StackPanel>
-                            <TextBlock Text="{Binding SignalText, StringFormat='Signal: {0}'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
-                            <TextBlock Text="{Binding Channel, StringFormat='Channel: {0}'}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
-                            <TextBlock Text="{Binding Security, StringFormat='Security: {0}'}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                              <TextBlock Text="{Binding SignalText, StringFormat='Signal: {0}'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                              <TextBlock Text="{Binding Channel, StringFormat='Ch: {0}'}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                              <TextBlock Text="{Binding Security, StringFormat='Sec: {0}'}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                            </StackPanel>
                           </StackPanel>
 
-                          <Button Grid.Column="1" Content="Join via OS..."
-                                  Command="{Binding $parent[UserControl].DataContext.OpenWifiModalCommand}"
+                          <Button Grid.Column="1" Content="Connect..."
+                                  Command="{Binding $parent[UserControl].DataContext.OpenConnectModalCommand}"
                                   CommandParameter="{Binding}"
-                                  Classes="secondary" FontSize="11" Padding="8,4" VerticalAlignment="Center"/>
+                                  Classes="primary" FontSize="11" Padding="10,5" VerticalAlignment="Center"/>
                         </Grid>
                       </Border>
                     </DataTemplate>
@@ -299,29 +359,154 @@
       </StackPanel>
     </ScrollViewer>
 
-    <!-- OS-Level Wi-Fi Join Disclosure Modal -->
-    <Border Background="#CC000000" IsVisible="{Binding IsWifiModalOpen}">
-      <Border Classes="card" Width="480" HorizontalAlignment="Center" VerticalAlignment="Center"
+    <!-- In-App Wi-Fi Connection Dialog -->
+    <Border Background="#D0000000" IsVisible="{Binding IsConnectModalOpen}">
+      <Border Classes="card" Width="520" HorizontalAlignment="Center" VerticalAlignment="Center"
               Background="{StaticResource SurfaceBackground}" BorderBrush="{StaticResource BorderColor}"
-              BorderThickness="1" CornerRadius="10" Padding="24">
+              BorderThickness="1" CornerRadius="12" Padding="24">
         <StackPanel Spacing="16">
-          <Grid ColumnDefinitions="Auto, *">
-            <Border Grid.Column="0" Classes="badgeWarning" VerticalAlignment="Center" Margin="0,0,10,0">
-              <TextBlock Text="OS NOTICE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+
+          <!-- Modal Header -->
+          <Grid ColumnDefinitions="Auto, *, Auto">
+            <Border Grid.Column="0" Classes="badgeCyan" VerticalAlignment="Center" Margin="0,0,10,0">
+              <TextBlock Text="WI-FI MANAGER" FontSize="10" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
             </Border>
-            <TextBlock Grid.Column="1" Text="macOS System Network Notice" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="1" Text="Connect to Wi-Fi Network" FontSize="16" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" Content="✕" Command="{Binding CloseConnectModalCommand}"
+                    Classes="secondary" FontSize="12" Padding="6,2" VerticalAlignment="Center"/>
           </Grid>
 
-          <TextBlock Text="{Binding ModalTargetSsid, StringFormat='Connecting to &quot;{0}&quot; is an operating system action.'}"
-                     FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource CyanAccent}"/>
+          <!-- Target Network Summary Card -->
+          <Border Background="#101C2E" BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1"
+                  CornerRadius="8" Padding="12">
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*, Auto">
+                <TextBlock Grid.Column="0" Text="{Binding TargetWifi.Ssid}" FontSize="16" FontWeight="Bold"
+                           Foreground="{StaticResource TextPrimary}"/>
+                <Border Grid.Column="1" Classes="badgeSuccess" IsVisible="{Binding TargetWifi.IsCurrent}">
+                  <TextBlock Text="Currently Connected" FontSize="9" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                </Border>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border Classes="badgeViolet">
+                  <TextBlock Text="{Binding TargetWifi.BandGroup, FallbackValue='Wi-Fi'}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource VioletAccent}"/>
+                </Border>
+                <Border Classes="badgeMuted">
+                  <TextBlock Text="{Binding TargetWifi.Security, FallbackValue='WPA2'}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                </Border>
+                <TextBlock Text="{Binding TargetWifi.SignalText, FallbackValue='Signal: Unknown'}" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
 
-          <TextBlock Text="On modern Mac computers with a single physical Wi-Fi radio, switching the Wi-Fi network is a system-wide action that affects all running applications and alters your primary internet connection.&#x0a;&#x0a;CamScope will never silently switch your system Wi-Fi connection. To discover cameras on an isolated network without changing your internet connection, connect a secondary physical adapter (such as a USB-C Ethernet or Thunderbolt adapter) and bind CamScope to that interface."
-                     FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="18"/>
-
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,8,0,0">
-            <Button Content="Cancel" Command="{Binding CloseWifiModalCommand}" Classes="secondary"/>
-            <Button Content="Open macOS Wi-Fi Settings..." Command="{Binding OpenSystemSettingsCommand}" Classes="primary"/>
+          <!-- Target Interface Selector -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Target Network Adapter" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}"/>
+            <ComboBox ItemsSource="{Binding AvailableWifiInterfaces}"
+                      SelectedItem="{Binding TargetInterfaceForConnect}"
+                      HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:CompileBindings="False">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                    <TextBlock Text="{Binding HardwarePort, StringFormat='({0})'}" Foreground="{StaticResource TextMuted}"/>
+                    <TextBlock Text="{Binding IPv4Address}" Foreground="{StaticResource CyanAccent}"/>
+                    <Border Classes="badgeSuccess" IsVisible="{Binding IsPrimaryInternet}">
+                      <TextBlock Text="Primary Internet" FontSize="9" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                    </Border>
+                  </StackPanel>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
           </StackPanel>
+
+          <!-- Single Adapter Concurrency Warning (When target is primary or only 1 adapter) -->
+          <Border Background="#261E0F" BorderBrush="{StaticResource AmberWarning}" BorderThickness="1"
+                  CornerRadius="8" Padding="12" IsVisible="{Binding RequiresSingleAdapterWarning}">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="Auto, *">
+                <TextBlock Grid.Column="0" Text="⚠ " FontSize="14" Foreground="{StaticResource AmberWarning}" VerticalAlignment="Top"/>
+                <TextBlock Grid.Column="1" Text="Single Adapter Concurrency Notice" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+              </Grid>
+              <TextBlock Text="Your Mac is currently using this Wi-Fi adapter for its primary internet connection. Single physical Wi-Fi hardware cannot connect to two SSIDs simultaneously. Connecting will alter your system-wide internet route.&#x0a;&#x0a;To discover CCTV cameras on an isolated Wi-Fi network without disrupting your primary internet, attach a secondary physical adapter (such as a USB-C Ethernet or Wi-Fi adapter) and select it above."
+                         FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="16"/>
+              <CheckBox IsChecked="{Binding UserConfirmedSingleAdapterSwitch}"
+                        Content="I acknowledge and authorize switching the primary Wi-Fi connection"
+                        FontSize="11" Foreground="{StaticResource AmberWarning}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Dedicated Secondary Adapter Isolation Banner -->
+          <Border Background="#0E2319" BorderBrush="{StaticResource GreenSuccess}" BorderThickness="1"
+                  CornerRadius="8" Padding="12" IsVisible="{Binding !RequiresSingleAdapterWarning}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="✓ Dedicated Secondary Adapter Isolation Confirmed" FontSize="12" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+              <TextBlock Text="This connection will be established on your secondary physical adapter. Your Mac's default gateway, DNS, and primary internet connectivity will remain unmodified and protected."
+                         FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Password Field (Visible for secured networks) -->
+          <StackPanel Spacing="4" IsVisible="{Binding TargetWifi.IsSecured, FallbackValue=True}">
+            <TextBlock Text="Wi-Fi Password" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}"/>
+            <Grid ColumnDefinitions="*, Auto">
+              <TextBox Grid.Column="0" Text="{Binding WifiPasswordInput}"
+                       PasswordChar="{Binding PasswordMaskChar}"
+                       Watermark="Enter WPA/WPA2/WPA3 password"
+                       CornerRadius="6,0,0,6" VerticalContentAlignment="Center"/>
+              <Button Grid.Column="1" Content="{Binding PasswordToggleText}"
+                      Command="{Binding TogglePasswordVisibilityCommand}"
+                      Classes="secondary" CornerRadius="0,6,6,0" Padding="12,6"/>
+            </Grid>
+            <TextBlock Text="{Binding PasswordValidationError}" FontSize="11" Foreground="{StaticResource RedDanger}"
+                       IsVisible="{Binding PasswordValidationError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+          </StackPanel>
+
+          <!-- Open Network Notice -->
+          <Border Background="#10233B" Padding="10" CornerRadius="6"
+                  IsVisible="{Binding !TargetWifi.IsSecured, FallbackValue=False}">
+            <TextBlock Text="This network is open (no encryption). No password is required to connect."
+                       FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+          </Border>
+
+          <!-- Progress / Error / Success Messages -->
+          <StackPanel Spacing="6" Margin="0,4,0,0">
+            <!-- Connecting State -->
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConnectingWifi}">
+              <ProgressBar IsIndeterminate="True" Width="80" Height="4" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="{Binding ConnectStatusMessage}" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+            </StackPanel>
+
+            <!-- Error Banner -->
+            <Border Background="#2B1214" BorderBrush="{StaticResource RedDanger}" BorderThickness="1"
+                    CornerRadius="6" Padding="10"
+                    IsVisible="{Binding ConnectErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+              <TextBlock Text="{Binding ConnectErrorMessage}" FontSize="11" Foreground="{StaticResource RedDanger}" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- Success Banner -->
+            <Border Background="#0E2319" BorderBrush="{StaticResource GreenSuccess}" BorderThickness="1"
+                    CornerRadius="6" Padding="10"
+                    IsVisible="{Binding ConnectSuccess}">
+              <TextBlock Text="{Binding ConnectSuccessMessage}" FontSize="11" Foreground="{StaticResource GreenSuccess}" TextWrapping="Wrap"/>
+            </Border>
+          </StackPanel>
+
+          <!-- Modal Action Buttons -->
+          <Grid ColumnDefinitions="Auto, *, Auto, Auto" Margin="0,8,0,0">
+            <Button Grid.Column="0" Content="macOS Settings..." Command="{Binding OpenSystemSettingsCommand}"
+                    Classes="secondary" FontSize="11" Padding="8,4"/>
+            <Button Grid.Column="2" Content="Cancel" Command="{Binding CloseConnectModalCommand}"
+                    Classes="secondary" Margin="0,0,8,0"/>
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+              <Button Content="Disconnect" Command="{Binding DisconnectWifiAsyncCommand}"
+                      Classes="danger" IsEnabled="{Binding !IsConnectingWifi}"/>
+              <Button Content="Connect" Command="{Binding ConnectWifiAsyncCommand}"
+                      Classes="primary" IsEnabled="{Binding !IsConnectingWifi}"/>
+            </StackPanel>
+          </Grid>
+
         </StackPanel>
       </Border>
     </Border>

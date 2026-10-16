@@ -63,4 +63,62 @@ public class NetworkSelectionServiceTests
         var service = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
         Assert.Throws<ArgumentNullException>(() => service.SelectScanningInterface(null!));
     }
+
+    [Fact]
+    public void SetCctvInterface_UpdatesCctvPropertiesAndRaisesEvent()
+    {
+        var service = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        NetworkInterfaceInfo? received = null;
+        int eventCount = 0;
+
+        service.CctvInterfaceChanged += iface =>
+        {
+            received = iface;
+            eventCount++;
+        };
+
+        var cctvIface = new NetworkInterfaceInfo
+        {
+            Id = "en1",
+            Name = "en1",
+            HardwarePort = "Wi-Fi (Secondary)",
+            IPv4Address = "192.168.10.5"
+        };
+        var connection = new WifiConnectionInfo
+        {
+            Ssid = "CCTV_Secure_5G",
+            InterfaceName = "en1",
+            IPv4Address = "192.168.10.5",
+            IsCctvNetwork = true
+        };
+
+        service.SetCctvInterface(cctvIface, connection);
+
+        Assert.NotNull(service.CctvInterface);
+        Assert.Equal("en1", service.CctvInterface.Name);
+        Assert.NotNull(service.CurrentCctvWifiConnection);
+        Assert.Equal("CCTV_Secure_5G", service.CurrentCctvWifiConnection.Ssid);
+        Assert.Equal(1, eventCount);
+        Assert.Same(cctvIface, received);
+    }
+
+    [Fact]
+    public void SetCctvInterface_CanClearCctvInterface()
+    {
+        var service = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var cctvIface = new NetworkInterfaceInfo { Id = "en1", Name = "en1" };
+        service.SetCctvInterface(cctvIface);
+
+        int eventCount = 0;
+        service.CctvInterfaceChanged += iface =>
+        {
+            if (iface == null) eventCount++;
+        };
+
+        service.SetCctvInterface(null, null);
+
+        Assert.Null(service.CctvInterface);
+        Assert.Null(service.CurrentCctvWifiConnection);
+        Assert.Equal(1, eventCount);
+    }
 }

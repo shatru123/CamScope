@@ -97,8 +97,24 @@ public interface INetworkInventoryService
 public interface INetworkSelectionService
 {
     NetworkInterfaceInfo? CurrentScanningInterface { get; }
+    NetworkInterfaceInfo? CctvInterface { get; }
+    WifiConnectionInfo? CurrentCctvWifiConnection { get; }
     void SelectScanningInterface(NetworkInterfaceInfo iface);
+    void SetCctvInterface(NetworkInterfaceInfo? iface, WifiConnectionInfo? connection = null);
     event Action<NetworkInterfaceInfo?>? SelectionChanged;
+    event Action<NetworkInterfaceInfo?>? CctvInterfaceChanged;
+}
+
+public interface IWifiNetworkManager
+{
+    bool IsPlatformSupported { get; }
+    bool CanSupportConcurrentConnections { get; }
+    Task<IReadOnlyList<WifiNetworkInfo>> GetAvailableNetworksAsync(string? interfaceName = null, CancellationToken ct = default);
+    Task<IReadOnlyList<WifiConnectionInfo>> GetCurrentConnectionsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<NetworkInterfaceInfo>> GetWifiInterfacesAsync(CancellationToken ct = default);
+    Task<WifiConnectionResult> ConnectAsync(WifiConnectRequest request, CancellationToken ct = default);
+    Task<bool> DisconnectAsync(string interfaceName, CancellationToken ct = default);
+    Task<WifiConnectionStatus> GetConnectionStatusAsync(string interfaceName, CancellationToken ct = default);
 }
 
 public interface INetworkPermissionService

@@ -100,6 +100,55 @@ public sealed class WifiNetworkInfo
     public string SignalText => Rssi.HasValue
         ? $"{Rssi.Value} dBm ({SignalQualityPercent}%)"
         : "Unknown (Not reported by OS)";
+
+    public bool IsSecured => !string.IsNullOrWhiteSpace(Security) &&
+                             !Security.Equals("None", StringComparison.OrdinalIgnoreCase) &&
+                             !Security.Equals("Open", StringComparison.OrdinalIgnoreCase);
+
+    public string BandGroup => (Band ?? "").Contains("6")
+        ? "6 GHz"
+        : (Band ?? "").Contains("5")
+            ? "5 GHz"
+            : "2.4 GHz";
+}
+
+public enum WifiConnectionStatus
+{
+    Disconnected,
+    Connecting,
+    Connected,
+    Failed,
+    Unsupported
+}
+
+public sealed class WifiConnectionInfo
+{
+    public string Ssid { get; set; } = string.Empty;
+    public string? Bssid { get; set; }
+    public string InterfaceName { get; set; } = string.Empty;
+    public string? IPv4Address { get; set; }
+    public bool IsPrimaryInternet { get; set; }
+    public bool IsCctvNetwork { get; set; }
+    public DateTime ConnectedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+public sealed class WifiConnectRequest
+{
+    public string Ssid { get; set; } = string.Empty;
+    public string? Password { get; set; }
+    public string InterfaceName { get; set; } = string.Empty;
+    public bool AllowSwitchingPrimaryIfSingleAdapter { get; set; }
+    public bool RememberInKeychain { get; set; }
+}
+
+public sealed class WifiConnectionResult
+{
+    public bool Succeeded { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string? ConnectedInterface { get; set; }
+    public string? AssignedIp { get; set; }
+    public bool PreservedPrimaryConnection { get; set; }
+    public RoutingInvariantResult? InvariantResult { get; set; }
 }
 
 public sealed class RoutingInvariantResult

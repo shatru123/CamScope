@@ -184,6 +184,52 @@ public class NetworkExplorerViewModelTests
         }
     }
 
+    private sealed class FakeWifiNetworkManager : IWifiNetworkManager
+    {
+        public bool IsPlatformSupported { get; set; } = true;
+        public bool CanSupportConcurrentConnections { get; set; } = false;
+        public List<WifiNetworkInfo> AvailableNetworks { get; set; } = [];
+        public List<WifiConnectionInfo> CurrentConnections { get; set; } = [];
+        public List<NetworkInterfaceInfo> WifiInterfaces { get; set; } = [];
+        public WifiConnectionResult ConnectResult { get; set; } = new()
+        {
+            Succeeded = true,
+            ConnectedInterface = "en1",
+            AssignedIp = "192.168.10.55",
+            PreservedPrimaryConnection = true,
+            Message = "Connected successfully"
+        };
+        public bool DisconnectResult { get; set; } = true;
+        public WifiConnectionStatus StatusToReturn { get; set; } = WifiConnectionStatus.Connected;
+
+        public WifiConnectRequest? LastConnectRequest { get; private set; }
+        public string? LastDisconnectedInterface { get; private set; }
+
+        public Task<IReadOnlyList<WifiNetworkInfo>> GetAvailableNetworksAsync(string? interfaceName = null, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<WifiNetworkInfo>>(AvailableNetworks);
+
+        public Task<IReadOnlyList<WifiConnectionInfo>> GetCurrentConnectionsAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<WifiConnectionInfo>>(CurrentConnections);
+
+        public Task<IReadOnlyList<NetworkInterfaceInfo>> GetWifiInterfacesAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<NetworkInterfaceInfo>>(WifiInterfaces);
+
+        public Task<WifiConnectionResult> ConnectAsync(WifiConnectRequest request, CancellationToken ct = default)
+        {
+            LastConnectRequest = request;
+            return Task.FromResult(ConnectResult);
+        }
+
+        public Task<bool> DisconnectAsync(string interfaceName, CancellationToken ct = default)
+        {
+            LastDisconnectedInterface = interfaceName;
+            return Task.FromResult(DisconnectResult);
+        }
+
+        public Task<WifiConnectionStatus> GetConnectionStatusAsync(string interfaceName, CancellationToken ct = default)
+            => Task.FromResult(StatusToReturn);
+    }
+
     [Fact]
     public async Task RefreshInventory_PopulatesAdaptersAndWifiTelemetry()
     {
@@ -510,5 +556,307 @@ public class NetworkExplorerViewModelTests
         Assert.Contains("WARNING: Primary routing mutation detected", vm.RoutingStabilityText);
         Assert.NotNull(vm.SubnetErrorMessage);
         Assert.Contains("Routing warning", vm.SubnetErrorMessage);
+    }
+
+    [Fact]
+    public async Task WifiFiltering_BySearchQuery_MatchesSsidAndBssid()
+    {
+        var inventory = new FakeNetworkInventoryService();
+        inventory.Report.WifiNetworks =
+        [
+            new WifiNetworkInfo { Ssid = "Office_Secure_5G", Bssid = "00:11:22:33:44:55", Band = "5 GHz", Security = "WPA2" },
+            new WifiNetworkInfo { Ssid = "Guest_Open", Bssid = "AA:BB:CC:DD:EE:FF", Band = "2.4 GHz", Security = "None" },
+            new WifiNetworkInfo { Ssid = "CCTV_Lab_Network", Bssid = "11:22:33:44:55:66", Band = "5 GHz", Security = "WPA3" }
+        ];
+
+        var vm = new NetworkExplorerViewModel(
+            inventory,
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+        Assert.Equal(3, vm.FilteredWifiNetworks.Count);
+
+        // Search by partial SSID
+        vm.WifiSearchQuery = "cctv";
+        Assert.Single(vm.FilteredWifiNetworks);
+        Assert.Equal("CCTV_Lab_Network", vm.FilteredWifiNetworks[0].Ssid);
+
+        // Search by BSSID
+        vm.WifiSearchQuery = "aa:bb";
+        Assert.Single(vm.FilteredWifiNetworks);
+        Assert.Equal("Guest_Open", vm.FilteredWifiNetworks[0].Ssid);
+
+        // Clear search
+        vm.WifiSearchQuery = "";
+        Assert.Equal(3, vm.FilteredWifiNetworks.Count);
+    }
+
+    [Fact]
+    public async Task WifiFiltering_BySecurity_FiltersCorrectly()
+    {
+        var inventory = new FakeNetworkInventoryService();
+        inventory.Report.WifiNetworks =
+        [
+            new WifiNetworkInfo { Ssid = "Secured_1", Security = "WPA2" },
+            new WifiNetworkInfo { Ssid = "Open_1", Security = "None" },
+            new WifiNetworkInfo { Ssid = "Secured_2", Security = "WPA3" }
+        ];
+
+        var vm = new NetworkExplorerViewModel(
+            inventory,
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        vm.SelectedSecurityFilter = "Secured";
+        Assert.Equal(2, vm.FilteredWifiNetworks.Count);
+        Assert.All(vm.FilteredWifiNetworks, w => Assert.True(w.IsSecured));
+
+        vm.SelectedSecurityFilter = "Open";
+        Assert.Single(vm.FilteredWifiNetworks);
+        Assert.Equal("Open_1", vm.FilteredWifiNetworks[0].Ssid);
+
+        vm.SelectedSecurityFilter = "All";
+        Assert.Equal(3, vm.FilteredWifiNetworks.Count);
+    }
+
+    [Fact]
+    public async Task WifiFiltering_ByBand_FiltersCorrectly()
+    {
+        var inventory = new FakeNetworkInventoryService();
+        inventory.Report.WifiNetworks =
+        [
+            new WifiNetworkInfo { Ssid = "Fast_5G", Band = "5 GHz" },
+            new WifiNetworkInfo { Ssid = "Legacy_24G", Band = "2.4 GHz" },
+            new WifiNetworkInfo { Ssid = "Another_5G", Band = "5 GHz" }
+        ];
+
+        var vm = new NetworkExplorerViewModel(
+            inventory,
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        vm.SelectedBandFilter = "5 GHz";
+        Assert.Equal(2, vm.FilteredWifiNetworks.Count);
+        Assert.All(vm.FilteredWifiNetworks, w => Assert.Equal("5 GHz", w.BandGroup));
+
+        vm.SelectedBandFilter = "2.4 GHz";
+        Assert.Single(vm.FilteredWifiNetworks);
+        Assert.Equal("Legacy_24G", vm.FilteredWifiNetworks[0].Ssid);
+    }
+
+    [Fact]
+    public async Task WifiSorting_SortsCorrectly()
+    {
+        var inventory = new FakeNetworkInventoryService();
+        inventory.Report.WifiNetworks =
+        [
+            new WifiNetworkInfo { Ssid = "Zeta_Net", Rssi = -30, Channel = 1 },
+            new WifiNetworkInfo { Ssid = "Alpha_Net", Rssi = -80, Channel = 11 },
+            new WifiNetworkInfo { Ssid = "Beta_Net", Rssi = -50, Channel = 6 }
+        ];
+
+        var vm = new NetworkExplorerViewModel(
+            inventory,
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        // Sort by SSID
+        vm.SelectedSortOption = "SSID (A-Z)";
+        Assert.Equal("Alpha_Net", vm.FilteredWifiNetworks[0].Ssid);
+        Assert.Equal("Beta_Net", vm.FilteredWifiNetworks[1].Ssid);
+        Assert.Equal("Zeta_Net", vm.FilteredWifiNetworks[2].Ssid);
+
+        // Sort by Channel
+        vm.SelectedSortOption = "Channel";
+        Assert.Equal(1, vm.FilteredWifiNetworks[0].Channel);
+        Assert.Equal(6, vm.FilteredWifiNetworks[1].Channel);
+        Assert.Equal(11, vm.FilteredWifiNetworks[2].Channel);
+
+        // Sort by Signal Strength
+        vm.SelectedSortOption = "Signal Strength";
+        Assert.Equal("Zeta_Net", vm.FilteredWifiNetworks[0].Ssid);
+    }
+
+    [Fact]
+    public void WifiModal_ShowHidePassword_TogglesMaskCharAndText()
+    {
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        Assert.False(vm.IsPasswordVisible);
+        Assert.Equal('•', vm.PasswordMaskChar);
+        Assert.Equal("Show", vm.PasswordToggleText);
+
+        vm.TogglePasswordVisibilityCommand.Execute(null);
+
+        Assert.True(vm.IsPasswordVisible);
+        Assert.Equal('\0', vm.PasswordMaskChar);
+        Assert.Equal("Hide", vm.PasswordToggleText);
+    }
+
+    [Fact]
+    public async Task WifiModal_ValidatesPasswordLength_ForSecuredNetworks()
+    {
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var securedWifi = new WifiNetworkInfo { Ssid = "Secured", Security = "WPA2" };
+        await vm.OpenConnectModalAsync(securedWifi);
+
+        // Blank password
+        vm.WifiPasswordInput = "";
+        await vm.ConnectWifiAsync();
+        Assert.NotNull(vm.PasswordValidationError);
+        Assert.Contains("Password is required", vm.PasswordValidationError);
+
+        // Too short (< 8 chars)
+        vm.WifiPasswordInput = "abc";
+        Assert.NotNull(vm.PasswordValidationError);
+        Assert.Contains("at least 8 characters", vm.PasswordValidationError);
+
+        // Valid (>= 8 chars)
+        vm.WifiPasswordInput = "12345678";
+        Assert.Null(vm.PasswordValidationError);
+    }
+
+    [Fact]
+    public async Task WifiModal_EnforcesSingleAdapterWarning_RequiresConfirmation()
+    {
+        var wifiManager = new FakeWifiNetworkManager();
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            wifiManager,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var targetWifi = new WifiNetworkInfo { Ssid = "TargetNet", Security = "None" };
+        await vm.OpenConnectModalAsync(targetWifi);
+
+        // Single adapter topology detected
+        Assert.True(vm.RequiresSingleAdapterWarning);
+
+        // Attempting to connect without checkbox confirmation fails
+        vm.UserConfirmedSingleAdapterSwitch = false;
+        await vm.ConnectWifiAsync();
+
+        Assert.NotNull(vm.ConnectErrorMessage);
+        Assert.Contains("acknowledge", vm.ConnectErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        // Confirming allows connection
+        vm.UserConfirmedSingleAdapterSwitch = true;
+        await vm.ConnectWifiAsync();
+
+        Assert.True(vm.ConnectSuccess);
+        Assert.Null(vm.ConnectErrorMessage);
+    }
+
+    [Fact]
+    public async Task WifiModal_OnConnectSuccess_SetsCctvInterfaceAndClearsPassword()
+    {
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var wifiManager = new FakeWifiNetworkManager
+        {
+            ConnectResult = new WifiConnectionResult
+            {
+                Succeeded = true,
+                ConnectedInterface = "en1",
+                AssignedIp = "192.168.99.10",
+                PreservedPrimaryConnection = true,
+                Message = "Connected"
+            }
+        };
+
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            selectionService,
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            wifiManager,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var targetWifi = new WifiNetworkInfo { Ssid = "CCTV_WLAN", Security = "WPA2" };
+        await vm.OpenConnectModalAsync(targetWifi);
+
+        vm.TargetInterfaceForConnect = new NetworkInterfaceInfo { Name = "en1", HardwarePort = "Wi-Fi Adapter" };
+        vm.RequiresSingleAdapterWarning = false;
+        vm.WifiPasswordInput = "StrongPassphrase!";
+
+        await vm.ConnectWifiAsync();
+
+        Assert.True(vm.ConnectSuccess);
+        // Zero password memory guarantee: password erased immediately
+        Assert.Empty(vm.WifiPasswordInput);
+
+        // CCTV route designated
+        Assert.NotNull(selectionService.CctvInterface);
+        Assert.Equal("en1", selectionService.CctvInterface.Name);
+        Assert.NotNull(selectionService.CurrentCctvWifiConnection);
+        Assert.Equal("CCTV_WLAN", selectionService.CurrentCctvWifiConnection.Ssid);
+    }
+
+    [Fact]
+    public async Task WifiModal_OnClose_ClearsPasswordAndErrors()
+    {
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var targetWifi = new WifiNetworkInfo { Ssid = "Net", Security = "WPA2" };
+        await vm.OpenConnectModalAsync(targetWifi);
+
+        vm.WifiPasswordInput = "sensitive_pass";
+        vm.PasswordValidationError = "Some error";
+        vm.ConnectErrorMessage = "Failed";
+
+        vm.CloseConnectModal();
+
+        Assert.False(vm.IsConnectModalOpen);
+        Assert.Empty(vm.WifiPasswordInput);
+        Assert.Null(vm.PasswordValidationError);
+        Assert.Null(vm.ConnectErrorMessage);
     }
 }
