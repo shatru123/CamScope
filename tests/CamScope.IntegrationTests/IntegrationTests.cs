@@ -252,4 +252,23 @@ public sealed class NetworkExplorerIntegrationTests
         Assert.True(invariantHeld, $"Routing invariant violated: {mutationWarning}");
         Assert.Null(mutationWarning);
     }
+
+    [Fact]
+    public async Task WsDiscoveryEngine_LiveProbeSendOnActiveInterface_DoesNotThrowPermissionDenied()
+    {
+        var inventoryService = new CamScope.Infrastructure.Network.NetworkInventoryService(
+            NullLogger<CamScope.Infrastructure.Network.NetworkInventoryService>.Instance,
+            new CamScope.Infrastructure.Network.NetworkPermissionService());
+
+        var report = await inventoryService.GetNetworkInventoryAsync(forceRefresh: true);
+        var primary = report.PrimaryInterface ?? report.Interfaces.FirstOrDefault(i => i.IsUp && !i.IsLoopback);
+        if (primary == null) return;
+
+        var engine = new CamScope.Discovery.Engine.WsDiscoveryEngine(
+            NullLogger<CamScope.Discovery.Engine.WsDiscoveryEngine>.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var devices = await engine.DiscoverAsync(primary, ct: cts.Token);
+        Assert.NotNull(devices);
+    }
 }
