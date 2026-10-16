@@ -221,6 +221,12 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(SelectedScanningInterface.IPv4Address))
+        {
+            SubnetErrorMessage = $"Selected adapter '{SelectedScanningInterface.Name}' ({SelectedScanningInterface.HardwarePort}) does not have an active IPv4 address. Connect a network cable or assign an IP address before scanning.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(SubnetInput))
         {
             SubnetErrorMessage = "Please enter a valid CIDR subnet prefix (e.g. 192.168.1.0/24).";

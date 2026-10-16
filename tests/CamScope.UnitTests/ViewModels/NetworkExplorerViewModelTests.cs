@@ -392,6 +392,39 @@ public class NetworkExplorerViewModelTests
     }
 
     [Fact]
+    public async Task StartSubnetScan_WhenInterfaceMissingIp_SetsErrorMessage()
+    {
+        var inventoryService = new FakeNetworkInventoryService();
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var scanner = new FakeSubnetScanner();
+        var repo = new FakeDeviceRepository();
+        var audit = new FakeAuditService();
+
+        var vm = new NetworkExplorerViewModel(
+            inventoryService,
+            selectionService,
+            scanner,
+            repo,
+            audit,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        // Select an interface without an assigned IPv4 address
+        vm.SelectedScanningInterface = new NetworkInterfaceInfo
+        {
+            Name = "en1",
+            HardwarePort = "Thunderbolt 1",
+            IPv4Address = ""
+        };
+
+        await vm.StartSubnetScanCommand.ExecuteAsync(null);
+
+        Assert.NotNull(vm.SubnetErrorMessage);
+        Assert.Contains("does not have an active IPv4 address", vm.SubnetErrorMessage);
+    }
+
+    [Fact]
     public async Task RefreshInventory_InitializesBindingStatusAndAdapterTopology()
     {
         var inventoryService = new FakeNetworkInventoryService();
