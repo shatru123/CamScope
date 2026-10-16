@@ -162,9 +162,9 @@
                 <DataGridCheckBoxColumn Header="Primary" Binding="{Binding IsPrimaryInternet}" Width="0.8*"/>
                 <DataGridTemplateColumn Header="Action" Width="1.6*">
                   <DataGridTemplateColumn.CellTemplate>
-                    <DataTemplate>
+                    <DataTemplate x:CompileBindings="False">
                       <Button Content="Select for Scanning"
-                              Command="{Binding $parent[UserControl].((vm:NetworkExplorerViewModel)DataContext).SelectInterfaceCommand}"
+                              Command="{Binding $parent[UserControl].DataContext.SelectInterfaceCommand}"
                               CommandParameter="{Binding}"
                               Classes="secondary" FontSize="11" Padding="8,4" Margin="2"
                               HorizontalAlignment="Center"/>
@@ -198,7 +198,7 @@
               <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding WifiNetworks}">
                   <ItemsControl.ItemTemplate>
-                    <DataTemplate>
+                    <DataTemplate x:CompileBindings="False">
                       <Border Background="#161E2E" BorderBrush="{StaticResource SubtleBorder}"
                               BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
                         <Grid ColumnDefinitions="*, Auto">
@@ -215,7 +215,7 @@
                           </StackPanel>
 
                           <Button Grid.Column="1" Content="Join via OS..."
-                                  Command="{Binding $parent[UserControl].((vm:NetworkExplorerViewModel)DataContext).OpenWifiModalCommand}"
+                                  Command="{Binding $parent[UserControl].DataContext.OpenWifiModalCommand}"
                                   CommandParameter="{Binding}"
                                   Classes="secondary" FontSize="11" Padding="8,4" VerticalAlignment="Center"/>
                         </Grid>
