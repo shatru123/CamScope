@@ -3,6 +3,7 @@ using Avalonia.Media.Imaging;
 using CamScope.Core.Enums;
 using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
+using CamScope.Streaming.Rendering;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -44,12 +45,23 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         if (newValue != null)
         {
             StatusText = newValue.AuthState == AuthenticationState.Authenticated
-                ? "Ready to stream"
+                ? (newValue.IsDemoDevice ? "Sample preview active - Click Start to stream" : "Ready to stream")
                 : "Camera must be authenticated before viewing live stream";
+
+            if (newValue.IsDemoDevice && !IsStreaming)
+            {
+                var frameBytes = SyntheticFrameGenerator.GenerateBmpFrame(newValue.DisplayName, newValue.Host, 0);
+                using var ms = new MemoryStream(frameBytes);
+                var old = CurrentBitmap;
+                CurrentBitmap = new Bitmap(ms);
+                old?.Dispose();
+            }
         }
         else
         {
             StatusText = "Idle - Select an authenticated camera";
+            CurrentBitmap?.Dispose();
+            CurrentBitmap = null;
         }
     }
 
@@ -90,8 +102,20 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         IsStreaming = false;
         State = StreamState.Idle;
         StatusText = "Stream stopped.";
-        CurrentBitmap?.Dispose();
-        CurrentBitmap = null;
+
+        if (Device != null && Device.IsDemoDevice)
+        {
+            var frameBytes = SyntheticFrameGenerator.GenerateBmpFrame(Device.DisplayName, Device.Host, 0);
+            using var ms = new MemoryStream(frameBytes);
+            var old = CurrentBitmap;
+            CurrentBitmap = new Bitmap(ms);
+            old?.Dispose();
+        }
+        else
+        {
+            CurrentBitmap?.Dispose();
+            CurrentBitmap = null;
+        }
     }
 
     private void OnFrameReceived(byte[] bmpBytes)
