@@ -11,6 +11,7 @@ public sealed class NetworkInterfaceInfo
     public string SubnetMask { get; set; } = string.Empty;
     public bool IsUp { get; set; }
     public bool SupportsMulticast { get; set; }
+    public bool IsLoopback { get; set; }
     public long SpeedBytesPerSec { get; set; }
 
     public string DisplayText => $"{Name} - {IPv4Address} ({Description})";

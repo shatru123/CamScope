@@ -17,6 +17,7 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
     private readonly Func<bool> _isDemoModeFunc;
 
     [ObservableProperty] private NetworkInterfaceInfo? _selectedInterface;
+    [ObservableProperty] private bool _includeLoopback;
     [ObservableProperty] private bool _isAuthorizedConfirmed;
     [ObservableProperty] private bool _isDiscovering;
     [ObservableProperty] private int _progressPercentage;
@@ -50,7 +51,7 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
     public void LoadInterfaces()
     {
         Interfaces.Clear();
-        var ifaces = _interfaceProvider.GetEligibleInterfaces();
+        var ifaces = _interfaceProvider.GetEligibleInterfaces(IncludeLoopback);
         foreach (var i in ifaces)
         {
             Interfaces.Add(i);
@@ -58,6 +59,7 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
         SelectedInterface = Interfaces.FirstOrDefault();
     }
 
+    partial void OnIncludeLoopbackChanged(bool value) => LoadInterfaces();
     partial void OnSelectedInterfaceChanged(NetworkInterfaceInfo? value) => OnPropertyChanged(nameof(CanStartDiscovery));
     partial void OnIsAuthorizedConfirmedChanged(bool value) => OnPropertyChanged(nameof(CanStartDiscovery));
     partial void OnIsDiscoveringChanged(bool value) => OnPropertyChanged(nameof(CanStartDiscovery));

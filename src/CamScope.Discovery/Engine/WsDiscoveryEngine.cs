@@ -59,6 +59,19 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
 
             try
             {
+                socket.SetSocketOption(
+                    SocketOptionLevel.IP,
+                    SocketOptionName.MulticastInterface,
+                    localIp.GetAddressBytes());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not set MulticastInterface option for interface {Name}", iface.Name);
+            }
+
+            bool joinedMulticast = false;
+            try
+            {
                 var multicastAddress = IPAddress.Parse(MulticastIPv4);
                 socket.SetSocketOption(
                     SocketOptionLevel.IP,
@@ -66,31 +79,59 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
                     new MulticastOption(multicastAddress, localIp));
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 4);
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
+                joinedMulticast = true;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to join multicast group on interface {Name}. Proceeding with directed broadcast.", iface.Name);
+                _logger.LogWarning(ex, "Failed to join multicast group on interface {Name}: {Message}", iface.Name, ex.Message);
+            }
+
+            IPEndPoint targetEndpoint;
+            if (joinedMulticast)
+            {
+                targetEndpoint = new IPEndPoint(IPAddress.Parse(MulticastIPv4), MulticastPort);
+            }
+            else
+            {
+                var broadcastIp = CalculateBroadcastAddress(localIp, iface.SubnetMask);
+                targetEndpoint = new IPEndPoint(broadcastIp, MulticastPort);
+                _logger.LogInformation("Multicast membership failed on interface {Name}. Falling back to directed broadcast {BroadcastIp}:{Port}",
+                    iface.Name, broadcastIp, MulticastPort);
             }
 
             var probeMessage = BuildProbeMessage();
             var probeBytes = Encoding.UTF8.GetBytes(probeMessage);
-            var multicastEndpoint = new IPEndPoint(IPAddress.Parse(MulticastIPv4), MulticastPort);
 
-            ReportProgress(progress, DiscoveryStatus.SendingProbes, 20, "Broadcasting WS-Discovery probe packets...", 0);
+            ReportProgress(progress, DiscoveryStatus.SendingProbes, 20,
+                joinedMulticast
+                    ? "Broadcasting WS-Discovery multicast probe packets..."
+                    : $"Broadcasting WS-Discovery directed probe packets to {targetEndpoint}...", 0);
 
-            // Send probe 2 times spaced by 200ms to increase reliability over UDP
-            try
+            int successfulProbes = 0;
+            SocketException? lastSocketException = null;
+
+            for (int i = 0; i < 2; i++)
             {
-                for (int i = 0; i < 2; i++)
+                linkedCts.Token.ThrowIfCancellationRequested();
+                try
                 {
-                    linkedCts.Token.ThrowIfCancellationRequested();
-                    await socket.SendToAsync(probeBytes, SocketFlags.None, multicastEndpoint, linkedCts.Token);
+                    await socket.SendToAsync(probeBytes, SocketFlags.None, targetEndpoint, linkedCts.Token);
+                    successfulProbes++;
                     await Task.Delay(200, linkedCts.Token);
                 }
+                catch (SocketException sex)
+                {
+                    lastSocketException = sex;
+                    _logger.LogWarning(sex, "Probe transmission failure ({Attempt}/2) on {Name}: {Message}", i + 1, iface.Name, sex.Message);
+                }
             }
-            catch (SocketException sex)
+
+            if (successfulProbes == 0)
             {
-                _logger.LogWarning(sex, "Multicast probe broadcast warning on interface {Name}: {Message}", iface.Name, sex.Message);
+                var msg = $"Fatal socket error sending discovery probes on interface {iface.Name}: {lastSocketException?.Message ?? "All transmission attempts failed"}";
+                _logger.LogError(lastSocketException, "{Message}", msg);
+                ReportProgress(progress, DiscoveryStatus.Failed, 100, msg, 0);
+                throw lastSocketException ?? new SocketException((int)SocketError.NetworkUnreachable);
             }
 
             ReportProgress(progress, DiscoveryStatus.AwaitingResponses, 40, "Awaiting responses from ONVIF devices...", 0);
@@ -222,5 +263,28 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
     </d:Probe>
   </s:Body>
 </s:Envelope>";
+    }
+
+    public static IPAddress CalculateBroadcastAddress(IPAddress ip, string? subnetMask)
+    {
+        if (string.IsNullOrWhiteSpace(subnetMask) || !IPAddress.TryParse(subnetMask, out var mask))
+        {
+            mask = IPAddress.Parse("255.255.255.0");
+        }
+
+        var ipBytes = ip.GetAddressBytes();
+        var maskBytes = mask.GetAddressBytes();
+        if (ipBytes.Length != maskBytes.Length)
+        {
+            return IPAddress.Broadcast;
+        }
+
+        var broadcastBytes = new byte[ipBytes.Length];
+        for (int i = 0; i < ipBytes.Length; i++)
+        {
+            broadcastBytes[i] = (byte)(ipBytes[i] | ~maskBytes[i]);
+        }
+
+        return new IPAddress(broadcastBytes);
     }
 }

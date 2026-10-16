@@ -13,6 +13,7 @@
     <ProjectReference Include="../../src/CamScope.CameraProtocols/CamScope.CameraProtocols.csproj" />
     <ProjectReference Include="../../src/CamScope.Streaming/CamScope.Streaming.csproj" />
     <ProjectReference Include="../../src/CamScope.Persistence/CamScope.Persistence.csproj" />
+    <ProjectReference Include="../../src/CamScope.App/CamScope.App.csproj" />
   </ItemGroup>
 
   <ItemGroup>

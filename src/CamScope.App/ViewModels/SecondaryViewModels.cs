@@ -26,7 +26,7 @@ public sealed partial class NetworkInterfacesViewModel : ViewModelBase
     public void Refresh()
     {
         Interfaces.Clear();
-        foreach (var i in _provider.GetEligibleInterfaces())
+        foreach (var i in _provider.GetEligibleInterfaces(includeLoopback: true))
         {
             Interfaces.Add(i);
         }

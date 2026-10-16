@@ -39,7 +39,7 @@ public interface IAuditService
 
 public interface INetworkInterfaceProvider
 {
-    IReadOnlyList<NetworkInterfaceInfo> GetEligibleInterfaces();
+    IReadOnlyList<NetworkInterfaceInfo> GetEligibleInterfaces(bool includeLoopback = false);
 }
 
 public interface IStreamingSession : IAsyncDisposable

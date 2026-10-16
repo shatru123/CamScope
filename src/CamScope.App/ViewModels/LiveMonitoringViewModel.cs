@@ -12,6 +12,8 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly IStreamingService _streamingService;
     private IStreamingSession? _session;
+    private int _isUpdatingFrame;
+    private bool _isDisposed;
 
     [ObservableProperty] private CameraDevice? _device;
     [ObservableProperty] private StreamState _state = StreamState.Idle;
@@ -32,8 +34,29 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         AvailableCameras = availableCameras;
     }
 
+    partial void OnDeviceChanged(CameraDevice? oldValue, CameraDevice? newValue)
+    {
+        if (oldValue != null && IsStreaming)
+        {
+            _ = StopAsync();
+        }
+        ErrorMessage = null;
+        if (newValue != null)
+        {
+            StatusText = newValue.AuthState == AuthenticationState.Authenticated
+                ? "Ready to stream"
+                : "Camera must be authenticated before viewing live stream";
+        }
+        else
+        {
+            StatusText = "Idle - Select an authenticated camera";
+        }
+    }
+
+    [RelayCommand]
     public async Task StartAsync()
     {
+        if (_isDisposed) return;
         if (Device == null) return;
         if (Device.AuthState != AuthenticationState.Authenticated)
         {
@@ -52,6 +75,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         await _session.StartAsync();
     }
 
+    [RelayCommand]
     public async Task StopAsync()
     {
         if (_session != null)
@@ -72,6 +96,14 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnFrameReceived(byte[] bmpBytes)
     {
+        if (_isDisposed || !IsStreaming) return;
+
+        // Coalesce frame updates to prevent dispatcher queue backlog under rapid video streams
+        if (Interlocked.CompareExchange(ref _isUpdatingFrame, 1, 0) != 0)
+        {
+            return;
+        }
+
         try
         {
             using var ms = new MemoryStream(bmpBytes);
@@ -79,27 +111,48 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
 
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                var old = CurrentBitmap;
-                CurrentBitmap = bmp;
-                old?.Dispose();
-
-                if (_session != null)
+                try
                 {
-                    Fps = Math.Round(_session.CurrentFps, 1);
-                    FrameCount = _session.FrameCount;
+                    if (_isDisposed || !IsStreaming)
+                    {
+                        bmp.Dispose();
+                        return;
+                    }
+
+                    var old = CurrentBitmap;
+                    CurrentBitmap = bmp;
+                    old?.Dispose();
+
+                    if (_session != null)
+                    {
+                        Fps = Math.Round(_session.CurrentFps, 1);
+                        FrameCount = _session.FrameCount;
+                        if (!string.IsNullOrEmpty(_session.StreamResolution))
+                        {
+                            Resolution = _session.StreamResolution;
+                        }
+                    }
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _isUpdatingFrame, 0);
                 }
             });
         }
         catch
         {
-            // Ignore decoding glitches during rapid frame updates
+            Interlocked.Exchange(ref _isUpdatingFrame, 0);
         }
     }
 
     private void OnStateChanged(StreamState newState, string? msg)
     {
+        if (_isDisposed) return;
+
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (_isDisposed) return;
+
             State = newState;
             StatusText = msg ?? newState.ToString();
             IsStreaming = newState == StreamState.Streaming;
@@ -112,6 +165,9 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
         await StopAsync();
     }
 }
@@ -122,6 +178,8 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
     private readonly IStreamingService _streamingService;
 
     [ObservableProperty] private int _gridLayout = 4; // 1, 4, 9
+    [ObservableProperty] private int _gridColumns = 2;
+    [ObservableProperty] private int _gridRows = 2;
     [ObservableProperty] private LiveCellViewModel? _selectedCell;
 
     public ObservableCollection<LiveCellViewModel> Cells { get; } = [];
@@ -162,6 +220,22 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
     public void SetLayout(int cellCount)
     {
         GridLayout = cellCount;
+        switch (cellCount)
+        {
+            case 1:
+                GridColumns = 1;
+                GridRows = 1;
+                break;
+            case 9:
+                GridColumns = 3;
+                GridRows = 3;
+                break;
+            default:
+                GridColumns = 2;
+                GridRows = 2;
+                break;
+        }
+
         while (Cells.Count < cellCount)
         {
             var cell = new LiveCellViewModel(_streamingService, AuthenticatedCameras);
@@ -170,8 +244,8 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
         while (Cells.Count > cellCount)
         {
             var cell = Cells[^1];
-            _ = cell.StopAsync();
             Cells.RemoveAt(Cells.Count - 1);
+            _ = cell.DisposeAsync();
         }
         SelectedCell = Cells.FirstOrDefault();
     }
@@ -203,5 +277,6 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
         {
             await cell.DisposeAsync();
         }
+        Cells.Clear();
     }
 }

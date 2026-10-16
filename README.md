@@ -24,9 +24,12 @@ CamScope is a cross-platform desktop application designed for security operators
 ## Key Features
 
 - **Local Network Discovery (ONVIF WS-Discovery)**
-  - Enumerates physical, wireless, and virtual network interfaces.
+  - Enumerates physical and wireless network interfaces with loopback filtering by default (plus optional diagnostic toggle).
+  - Constrains multicast outbound traffic strictly to the authorized interface via `SocketOptionName.MulticastInterface`.
+  - Automatically calculates subnet directed broadcast fallback when multicast group joins are restricted by local networks or switches.
   - Requires explicit user authorization confirmation before initiating discovery.
   - Broadcasts standard ONVIF WS-Discovery Probe messages (`dn:NetworkVideoTransmitter`).
+  - Differentiates bind, transmission, and response errors—fatal socket transmission exceptions are reported accurately rather than swallowed.
   - Strict XML security parser protecting against XML External Entity (XXE) and XML bomb attacks.
   - Real-time response parsing with duplicate device merging.
   - Instant discovery cancellation.
@@ -43,14 +46,16 @@ CamScope is a cross-platform desktop application designed for security operators
   - Interactive table and card views with sorting and real-time filtering.
   - Filter by search query, manufacturer, or connection/authentication status.
   - Manual device entry for cameras with known IP and custom ONVIF service paths.
+  - Actions column with direct `Auth` and `Del` commands.
   - Export inventory reports to CSV or JSON with sensitive credentials omitted.
 
-- **Multi-Camera Live Monitoring**
-  - Flexible grid matrix: Single (1x1), Quad (2x2), Matrix (3x3).
-  - Only authenticated, stream-capable cameras can be launched.
-  - Real-time frame rendering with live FPS, frame counter, and resolution badges.
-  - Resilient automatic reconnection with bounded exponential backoff (1s, 2s, 4s, 8s, up to max 30s).
-  - Clean asynchronous stream disposal and resource cleanup.
+- **Real RTSP Multi-Camera Live Monitoring**
+  - **Real Device Mode**: Uses cross-platform **FFmpeg media pipeline integration** (`-rtsp_transport tcp -i <uri> -f image2pipe -vcodec bmp -`) to demux and decode live H.264/H.265/MJPEG RTSP video feeds from cameras directly into continuous frame streams.
+  - **Secure Credentials**: Credentials resolved automatically from the secure credential store (`ICredentialStore` / macOS Keychain) and injected into the RTSP session without exposing secrets in logs.
+  - **Zero Silent Fallback**: Real devices never display synthetic frames; if an RTSP URI is missing, FFmpeg is absent, or connection fails, the cell enters `StreamState.Error` with descriptive diagnostics.
+  - **Disciplined Lifecycle & Concurrency**: Session concurrency synchronization (`SemaphoreSlim`), linked cancellation tokens, non-recursive iterative reconnection loops with bounded backoff (1s–30s), and guaranteed task completion before resource disposal.
+  - **UI Frame Coalescing**: Throttles and coalesces incoming frames to prevent Avalonia UI dispatcher queue backlog under high-framerate streams.
+  - **Responsive Matrix**: Scales to 1x1 Single, 2x2 Quad, and 3x3 Matrix grid viewport.
 
 - **Recordings & Playback Timeline**
   - Search historical recording segments through camera ONVIF recording search APIs.
@@ -58,9 +63,10 @@ CamScope is a cross-platform desktop application designed for security operators
   - **Honest capability handling**: clearly informs the user when a camera does not expose the ONVIF Recording Search service.
 
 - **Evaluation & Demonstration Mode**
-  - Easily toggleable Demo Mode for evaluating the UI without physical cameras.
+  - Toggleable Demo Mode for evaluating the full UI workflow without physical cameras.
   - Generates realistic synthetic devices (Axis, Hanwha, Hikvision, Bosch, Dahua) clearly marked with `[DEMO]`.
-  - Simulates discovery progress, streaming frames, and playback segments without accessing external sockets.
+  - Produces pure C# synthetic test frames strictly when `device.IsDemoDevice == true`.
+  - Demo streaming is strictly isolated from real-device execution.
 
 - **Security & Activity Audit Logging**
   - Immutable audit trail recording discovery sessions, authentication attempts, manual additions, and exports.

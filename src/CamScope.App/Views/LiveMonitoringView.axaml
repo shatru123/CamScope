@@ -29,7 +29,7 @@
     <ItemsControl Grid.Row="1" ItemsSource="{Binding Cells}">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
-          <UniformGrid Rows="2" Columns="2"/>
+          <UniformGrid Rows="{Binding GridRows}" Columns="{Binding GridColumns}"/>
         </ItemsPanelTemplate>
       </ItemsControl.ItemsPanel>
 

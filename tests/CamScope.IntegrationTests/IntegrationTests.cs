@@ -126,7 +126,8 @@ public sealed class DemoModeIntegrationTests
         {
             DisplayName = "Test Demo Stream Camera",
             Host = "192.168.1.101",
-            AuthState = AuthenticationState.Authenticated
+            AuthState = AuthenticationState.Authenticated,
+            IsDemoDevice = true
         };
 
         var logger = NullLogger<RtspStreamSession>.Instance;
@@ -149,6 +150,55 @@ public sealed class DemoModeIntegrationTests
         await session.DisposeAsync();
 
         Assert.True(frameCounter > 0, "At least one synthetic frame should be emitted");
+        Assert.Equal(StreamState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task RtspStreamSession_RealStreamingWithFFmpeg_DecodesFramesAndTracksMetrics()
+    {
+        var ffmpeg = RtspStreamSession.FindFfmpegPath();
+        if (string.IsNullOrWhiteSpace(ffmpeg))
+        {
+            // Skip if FFmpeg is not installed on the host
+            return;
+        }
+
+        var device = new CameraDevice
+        {
+            DisplayName = "Real Live Feed Fixture",
+            Host = "127.0.0.1",
+            IsDemoDevice = false,
+            AuthState = AuthenticationState.Authenticated,
+            RtspStreamUri = "testsrc=size=320x240:rate=10"
+        };
+
+        var logger = NullLogger<RtspStreamSession>.Instance;
+        var session = new RtspStreamSession(device, null, null, logger);
+
+        var firstFrameTcs = new TaskCompletionSource<byte[]>();
+        session.FrameReceived += bytes => firstFrameTcs.TrySetResult(bytes);
+
+        await session.StartAsync();
+
+        var completed = await Task.WhenAny(firstFrameTcs.Task, Task.Delay(5000));
+        Assert.Same(firstFrameTcs.Task, completed);
+
+        var frameBytes = await firstFrameTcs.Task;
+        Assert.NotNull(frameBytes);
+        Assert.True(frameBytes.Length > 54);
+        Assert.Equal(0x42, frameBytes[0]); // 'B'
+        Assert.Equal(0x4D, frameBytes[1]); // 'M'
+
+        int width = BitConverter.ToInt32(frameBytes, 18);
+        int height = Math.Abs(BitConverter.ToInt32(frameBytes, 22));
+        Assert.Equal(320, width);
+        Assert.Equal(240, height);
+        Assert.Equal("320x240", session.StreamResolution);
+        Assert.True(session.FrameCount > 0);
+
+        await session.StopAsync();
+        await session.DisposeAsync();
+
         Assert.Equal(StreamState.Idle, session.State);
     }
 }

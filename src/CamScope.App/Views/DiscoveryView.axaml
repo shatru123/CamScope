@@ -31,6 +31,9 @@
                   </DataTemplate>
                 </ComboBox.ItemTemplate>
               </ComboBox>
+              <CheckBox IsChecked="{Binding IncludeLoopback}" Margin="0,6,0,0">
+                <TextBlock Text="Show diagnostic / loopback adapters" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+              </CheckBox>
             </StackPanel>
 
             <!-- Interface Details Pill -->
