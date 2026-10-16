@@ -566,7 +566,7 @@
                               <TextBlock Text="{Binding IPv4Address}" Foreground="{StaticResource CyanAccent}" FontSize="11"/>
                             </StackPanel>
                             <Button Grid.Column="1" Content="Use for CCTV"
-                                    Command="{Binding $parent[UserControl].((vm:NetworkExplorerViewModel)DataContext).SelectWiredAlternativeCommand}"
+                                    Command="{Binding $parent[UserControl].DataContext.SelectWiredAlternativeCommand}"
                                     CommandParameter="{Binding}"
                                     Classes="secondary" FontSize="10" Padding="8,2"/>
                           </Grid>
