@@ -280,4 +280,91 @@ Wi-Fi:
         Assert.False(result.IsStable);
         Assert.Contains(result.MutationDetails, m => m.Contains("Active Wi-Fi SSID changed"));
     }
+
+    private const string SampleRedactedAirPortProfile = @"
+Wi-Fi:
+      Interfaces:
+        en0:
+          Card Type: Wi-Fi  (0x14E4, 0x4388)
+          Status: Connected
+          Current Network Information:
+            <redacted>:
+              PHY Mode: 802.11ax
+              Channel: 157 (5GHz, 80MHz)
+              Security: WPA2 Personal
+              Signal / Noise: -43 dBm / -93 dBm
+          Other Local Wi-Fi Networks:
+            <redacted>:
+              PHY Mode: 802.11b/g
+              Channel: 11 (2GHz, 20MHz)
+              Security: WPA2 Personal
+            <redacted>:
+              PHY Mode: 802.11a/n/ac/ax
+              Channel: 60 (5GHz, 160MHz)
+              Security: WPA2 Personal
+            Valid_Unredacted_Net:
+              PHY Mode: 802.11ax
+              Channel: 36 (5GHz, 80MHz)
+              Security: WPA2 Personal
+              Signal / Noise: -55 dBm / -90 dBm
+";
+
+    [Fact]
+    public void ParseAirPortOutput_FiltersOutRedactedSSIDs()
+    {
+        var (currentSsid, networks) = NetworkInventoryService.ParseAirPortOutput(SampleRedactedAirPortProfile);
+
+        Assert.Null(currentSsid);
+        Assert.Single(networks);
+        Assert.Equal("Valid_Unredacted_Net", networks[0].Ssid);
+        Assert.DoesNotContain(networks, n => n.Ssid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void MacCoreWlanScanner_ParseScanJson_ParsesUnredactedNetworksAndFiltersRedacted()
+    {
+        string sampleJson = @"
+[
+  {
+    ""ssid"": ""ShatruNeha"",
+    ""rssi"": -40,
+    ""channel"": 157,
+    ""band"": ""5 GHz"",
+    ""security"": ""WPA2 Personal"",
+    ""bssid"": ""aa:bb:cc:dd:ee:ff""
+  },
+  {
+    ""ssid"": ""<redacted>"",
+    ""rssi"": -70,
+    ""channel"": 6,
+    ""band"": ""2.4 GHz"",
+    ""security"": ""WPA2 Personal"",
+    ""bssid"": null
+  },
+  {
+    ""ssid"": ""Airtel_moha_3777"",
+    ""rssi"": -68,
+    ""channel"": 11,
+    ""band"": ""2.4 GHz"",
+    ""security"": ""WPA2 Personal"",
+    ""bssid"": null
+  }
+]";
+
+        var networks = MacCoreWlanScanner.ParseScanJson(sampleJson);
+
+        Assert.Equal(2, networks.Count);
+        Assert.Equal("ShatruNeha", networks[0].Ssid);
+        Assert.Equal(-40, networks[0].Rssi);
+        Assert.Equal(157, networks[0].Channel);
+        Assert.Equal("5 GHz", networks[0].Band);
+        Assert.Equal("WPA2 Personal", networks[0].Security);
+
+        Assert.Equal("Airtel_moha_3777", networks[1].Ssid);
+        Assert.Equal(-68, networks[1].Rssi);
+        Assert.Equal(11, networks[1].Channel);
+        Assert.Equal("2.4 GHz", networks[1].Band);
+
+        Assert.DoesNotContain(networks, n => n.Ssid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase));
+    }
 }

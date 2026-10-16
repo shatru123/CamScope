@@ -63,11 +63,51 @@ public sealed class NetworkInventoryService : INetworkInventoryService
             {
                 var wifiOutput = await RunProcessAsync("system_profiler", "SPAirPortDataType", ct).ConfigureAwait(false);
                 var (ssid, _) = ParseAirPortOutput(wifiOutput);
-                currentSsid = ssid;
+                if (!string.IsNullOrEmpty(ssid) && !ssid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                {
+                    currentSsid = ssid;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Failed to capture current SSID for routing snapshot");
+                _logger.LogDebug(ex, "Failed to capture current SSID for routing snapshot via system_profiler");
+            }
+
+            if (string.IsNullOrEmpty(currentSsid))
+            {
+                try
+                {
+                    var assocOutput = await RunProcessAsync("networksetup", "-getairportnetwork en0", ct).ConfigureAwait(false);
+                    var match = Regex.Match(assocOutput, @"Current Wi-Fi Network:\s*(.+)", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        var assocSsid = match.Groups[1].Value.Trim();
+                        if (!string.IsNullOrEmpty(assocSsid) && !assocSsid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                        {
+                            currentSsid = assocSsid;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrEmpty(currentSsid))
+            {
+                try
+                {
+                    var prefOutput = await RunProcessAsync("networksetup", "-listpreferredwirelessnetworks en0", ct).ConfigureAwait(false);
+                    var preferredLines = prefOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                        .Skip(1)
+                        .Select(l => l.Trim())
+                        .Where(l => !string.IsNullOrEmpty(l) && !l.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (preferredLines.Count > 0)
+                    {
+                        currentSsid = preferredLines[0];
+                    }
+                }
+                catch { }
             }
         }
 
@@ -252,17 +292,117 @@ public sealed class NetworkInventoryService : INetworkInventoryService
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && isWifiPermitted)
         {
+            // 1. Primary: Scan via CoreWLAN (Swift helper) to obtain live, unredacted Wi-Fi SSIDs, RSSI, and security
+            try
+            {
+                var scanner = new MacCoreWlanScanner(_logger);
+                var coreWlanNetworks = await scanner.ScanNetworksAsync(ct).ConfigureAwait(false);
+                if (coreWlanNetworks.Count > 0)
+                {
+                    wifiNetworks = coreWlanNetworks;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "CoreWLAN swift scanning failed; will attempt system_profiler fallback");
+            }
+
+            // 2. Query system_profiler for current Wi-Fi status and additional telemetry
             try
             {
                 var wifiOutput = await RunProcessAsync("system_profiler", "SPAirPortDataType", ct).ConfigureAwait(false);
-                var (currSsid, networks) = ParseAirPortOutput(wifiOutput);
-                currentWifiSsid = currSsid;
-                wifiNetworks = networks;
+                var (currSsid, fallbackNetworks) = ParseAirPortOutput(wifiOutput);
+                if (!string.IsNullOrEmpty(currSsid) && !currSsid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                {
+                    currentWifiSsid = currSsid;
+                }
+
+                // If CoreWLAN did not find networks, fallback to unredacted networks from system_profiler
+                if (wifiNetworks.Count == 0 && fallbackNetworks.Count > 0)
+                {
+                    wifiNetworks = fallbackNetworks;
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Failed to scan Wi-Fi networks via system_profiler");
             }
+
+            // 3. If currentWifiSsid is still not identified, attempt networksetup association query
+            if (string.IsNullOrEmpty(currentWifiSsid))
+            {
+                try
+                {
+                    var wifiIface = interfaces.FirstOrDefault(i => i.InterfaceKind == NetworkInterfaceKind.WiFi)?.Name ?? "en0";
+                    var assocOutput = await RunProcessAsync("networksetup", $"-getairportnetwork {wifiIface}", ct).ConfigureAwait(false);
+                    var match = Regex.Match(assocOutput, @"Current Wi-Fi Network:\s*(.+)", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        var assocSsid = match.Groups[1].Value.Trim();
+                        if (!string.IsNullOrEmpty(assocSsid) && !assocSsid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                        {
+                            currentWifiSsid = assocSsid;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to query airport network association via networksetup");
+                }
+            }
+
+            // 4. If currentWifiSsid is still not identified and Wi-Fi interface is active/UP, correlate with preferred networks
+            if (string.IsNullOrEmpty(currentWifiSsid))
+            {
+                var wifiIfaceInfo = interfaces.FirstOrDefault(i => i.InterfaceKind == NetworkInterfaceKind.WiFi && i.IsUp && !string.IsNullOrEmpty(i.IPv4Address));
+                if (wifiIfaceInfo != null)
+                {
+                    try
+                    {
+                        var prefOutput = await RunProcessAsync("networksetup", $"-listpreferredwirelessnetworks {wifiIfaceInfo.Name}", ct).ConfigureAwait(false);
+                        var preferredLines = prefOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                            .Skip(1)
+                            .Select(l => l.Trim())
+                            .Where(l => !string.IsNullOrEmpty(l) && !l.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+                        var matchedCurrent = wifiNetworks
+                            .Where(n => preferredLines.Any(p => p.Equals(n.Ssid, StringComparison.OrdinalIgnoreCase)))
+                            .OrderByDescending(n => n.Rssi ?? -999)
+                            .FirstOrDefault();
+
+                        if (matchedCurrent != null)
+                        {
+                            currentWifiSsid = matchedCurrent.Ssid;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to resolve current Wi-Fi SSID via preferred networks correlation");
+                    }
+                }
+            }
+
+            // 5. Mark IsCurrent on the matching network in wifiNetworks
+            if (!string.IsNullOrEmpty(currentWifiSsid))
+            {
+                foreach (var net in wifiNetworks)
+                {
+                    if (net.Ssid.Equals(currentWifiSsid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        net.IsCurrent = true;
+                    }
+                }
+            }
+
+            // Deduplicate wifiNetworks by SSID (case-insensitive), preserving highest RSSI and IsCurrent
+            wifiNetworks = wifiNetworks
+                .Where(n => !string.IsNullOrWhiteSpace(n.Ssid) && !n.Ssid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(n => n.Ssid, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(n => n.IsCurrent).ThenByDescending(n => n.Rssi ?? -999).First())
+                .OrderByDescending(n => n.IsCurrent)
+                .ThenByDescending(n => n.Rssi ?? -999)
+                .ToList();
         }
 
         var primaryIface = interfaces.FirstOrDefault(i => i.IsPrimaryInternet) ??
@@ -564,7 +704,7 @@ public sealed class NetworkInventoryService : INetworkInventoryService
                 leadingSpaces is >= 10 and <= 14)
             {
                 string ssid = trimmed[..^1].Trim();
-                if (!string.IsNullOrEmpty(ssid))
+                if (!string.IsNullOrEmpty(ssid) && !ssid.Equals("<redacted>", StringComparison.OrdinalIgnoreCase))
                 {
                     currentEntry = new WifiNetworkInfo
                     {
@@ -579,6 +719,10 @@ public sealed class NetworkInventoryService : INetworkInventoryService
                     }
 
                     networks.Add(currentEntry);
+                }
+                else
+                {
+                    currentEntry = null;
                 }
                 continue;
             }
@@ -628,6 +772,11 @@ public sealed class NetworkInventoryService : INetworkInventoryService
             .OrderByDescending(n => n.IsCurrent)
             .ThenByDescending(n => n.Rssi ?? -999)
             .ToList();
+
+        if (string.Equals(currentSsid, "<redacted>", StringComparison.OrdinalIgnoreCase))
+        {
+            currentSsid = null;
+        }
 
         return (currentSsid, deduped);
     }
