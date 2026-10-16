@@ -68,6 +68,15 @@ CamScope is a cross-platform desktop application designed for security operators
   - Produces pure C# synthetic test frames strictly when `device.IsDemoDevice == true`.
   - Demo streaming is strictly isolated from real-device execution.
 
+- **Network Explorer & App-Scoped Interface Binding**
+  - **Primary Internet Protection**: CamScope binds discovery and streaming strictly at the application socket level (`Socket.Bind` to interface IP and `SocketOptionName.MulticastInterface`). Your Mac's default gateway, system routes, DNS, and primary internet connectivity remain 100% untouched and unmodified.
+  - **Multi-Adapter Inspection**: Identifies physical hardware ports ("Wi-Fi", "Thunderbolt 1", "USB Ethernet Adapter") via macOS system utilities and maps them to BSD device names (`en0`, `en3`, etc.).
+  - **Nearby Wi-Fi Telemetry**: Reads real Wi-Fi environment telemetry (SSID, RSSI dBm, signal percentage, channel, band, security protocol, PHY mode) via supported macOS diagnostic facilities.
+  - **OS-Level Wi-Fi Disclosure**: Explicitly discloses that switching Wi-Fi SSIDs is an operating system action affecting the entire computer. CamScope never silently alters system Wi-Fi connections and provides a modal with quick access to macOS System Settings.
+  - **Directed Subnet Scanner (CIDR Sweep)**: Sweeps IPv4 subnets (e.g. `192.168.1.0/24`, up to 512 hosts) via bounded concurrency unicast UDP probes on port 3702, enabling camera discovery across routed subnets, VLANs, and environments where multicast WS-Discovery is blocked.
+  - **Multi-Point Reachability Diagnostics**: Analyzes selected interface link state, loopback status, multicast readiness, and gateway availability with actionable operator recommendations.
+  - **Routing Invariant Verification**: Captures before-and-after routing snapshots to cryptographically and structurally verify that no system routes or gateways were altered during scans.
+
 - **Security & Activity Audit Logging**
   - Immutable audit trail recording discovery sessions, authentication attempts, manual additions, and exports.
   - Export audit logs to CSV or clear audit history.

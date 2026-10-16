@@ -7,6 +7,7 @@ using CamScope.Application.Services;
 using CamScope.CameraProtocols.Onvif;
 using CamScope.Core.Interfaces;
 using CamScope.Discovery.Engine;
+using CamScope.Discovery.Scanning;
 using CamScope.Infrastructure.Logging;
 using CamScope.Infrastructure.Network;
 using CamScope.Infrastructure.Security;
@@ -69,6 +70,10 @@ public partial class App : Avalonia.Application
 
         // Network & Security
         services.AddSingleton<INetworkInterfaceProvider, NetworkInterfaceProvider>();
+        services.AddSingleton<INetworkSelectionService, NetworkSelectionService>();
+        services.AddSingleton<INetworkPermissionService, NetworkPermissionService>();
+        services.AddSingleton<INetworkInventoryService, NetworkInventoryService>();
+        services.AddSingleton<ISubnetScanner, SubnetScanner>();
         services.AddSingleton<ICredentialStore, SecureCredentialStore>();
 
         // Discovery Engines
@@ -100,7 +105,8 @@ public partial class App : Avalonia.Application
             sp.GetRequiredService<INetworkInterfaceProvider>(),
             sp.GetRequiredService<IDeviceRepository>(),
             sp.GetRequiredService<IAuditService>(),
-            () => isDemoModeHolder.IsDemoMode));
+            () => isDemoModeHolder.IsDemoMode,
+            sp.GetRequiredService<INetworkSelectionService>()));
 
         services.AddSingleton<InventoryViewModel>(sp => new InventoryViewModel(
             sp.GetRequiredService<IDeviceRepository>(),
@@ -114,6 +120,7 @@ public partial class App : Avalonia.Application
             sp.GetRequiredService<ICredentialStore>(),
             () => isDemoModeHolder.IsDemoMode));
 
+        services.AddSingleton<NetworkExplorerViewModel>();
         services.AddSingleton<NetworkInterfacesViewModel>();
         services.AddSingleton<DeviceGroupsViewModel>();
         services.AddSingleton<DiagnosticsViewModel>();
@@ -127,7 +134,19 @@ public partial class App : Avalonia.Application
                 main.IsDemoModeEnabled = enabled;
             }));
 
-        services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton<MainWindowViewModel>(sp => new MainWindowViewModel(
+            sp.GetRequiredService<OverviewViewModel>(),
+            sp.GetRequiredService<DiscoveryViewModel>(),
+            sp.GetRequiredService<InventoryViewModel>(),
+            sp.GetRequiredService<LiveMonitoringViewModel>(),
+            sp.GetRequiredService<RecordingsViewModel>(),
+            sp.GetRequiredService<NetworkExplorerViewModel>(),
+            sp.GetRequiredService<DeviceGroupsViewModel>(),
+            sp.GetRequiredService<DiagnosticsViewModel>(),
+            sp.GetRequiredService<AuditLogViewModel>(),
+            sp.GetRequiredService<SettingsViewModel>(),
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<INetworkSelectionService>()));
     }
 }
 

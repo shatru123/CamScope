@@ -113,7 +113,7 @@
               <TextBlock Text="Recordings" FontSize="13"/>
             </ListBoxItem>
             <ListBoxItem Classes="navItem">
-              <TextBlock Text="Network Interfaces" FontSize="13"/>
+              <TextBlock Text="Network Explorer" FontSize="13"/>
             </ListBoxItem>
             <ListBoxItem Classes="navItem">
               <TextBlock Text="Device Groups" FontSize="13"/>
@@ -159,8 +159,8 @@
             <DataTemplate DataType="{x:Type vm:RecordingsViewModel}">
               <views:RecordingsView />
             </DataTemplate>
-            <DataTemplate DataType="{x:Type vm:NetworkInterfacesViewModel}">
-              <views:NetworkInterfacesView />
+            <DataTemplate DataType="{x:Type vm:NetworkExplorerViewModel}">
+              <views:NetworkExplorerView />
             </DataTemplate>
             <DataTemplate DataType="{x:Type vm:DeviceGroupsViewModel}">
               <views:DeviceGroupsView />

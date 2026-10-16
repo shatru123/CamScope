@@ -162,7 +162,7 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
                     if (receiveResult.ReceivedBytes > 0)
                     {
                         var responseXml = Encoding.UTF8.GetString(receiveBuffer, 0, receiveResult.ReceivedBytes);
-                        ProcessResponse(responseXml, progress);
+                        ProcessResponse(responseXml, iface, progress);
                     }
                 }
                 catch (OperationCanceledException) when (!linkedCts.Token.IsCancellationRequested)
@@ -198,17 +198,23 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
         }
     }
 
-    private void ProcessResponse(string responseXml, IProgress<DiscoveryProgressReport>? progress)
+    private void ProcessResponse(string responseXml, NetworkInterfaceInfo iface, IProgress<DiscoveryProgressReport>? progress)
     {
         try
         {
             var devices = ProbeMatchParser.ParseProbeMatches(responseXml);
             foreach (var dev in devices)
             {
+                if (!dev.Tags.Contains($"Interface:{iface.Name}"))
+                {
+                    dev.Tags.Add($"Interface:{iface.Name}");
+                }
+
                 var isNew = _deduplicator.TryAddOrUpdate(dev, out var current);
                 if (isNew)
                 {
-                    _logger.LogInformation("Discovered device {DisplayName} at {Host}:{Port}", current.DisplayName, current.Host, current.Port);
+                    _logger.LogInformation("Discovered device {DisplayName} at {Host}:{Port} via interface {Interface}",
+                        current.DisplayName, current.Host, current.Port, iface.Name);
                     ReportProgress(
                         progress,
                         DiscoveryStatus.ProcessingDevices,

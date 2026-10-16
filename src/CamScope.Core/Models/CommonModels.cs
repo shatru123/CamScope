@@ -7,14 +7,22 @@ public sealed class NetworkInterfaceInfo
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string HardwarePort { get; set; } = string.Empty;
     public string IPv4Address { get; set; } = string.Empty;
     public string SubnetMask { get; set; } = string.Empty;
+    public string? GatewayAddress { get; set; }
+    public string? IPv6Address { get; set; }
+    public string? MacAddress { get; set; }
     public bool IsUp { get; set; }
     public bool SupportsMulticast { get; set; }
     public bool IsLoopback { get; set; }
+    public bool IsPrimaryInternet { get; set; }
+    public NetworkInterfaceKind InterfaceKind { get; set; } = NetworkInterfaceKind.Other;
     public long SpeedBytesPerSec { get; set; }
 
-    public string DisplayText => $"{Name} - {IPv4Address} ({Description})";
+    public string DisplayText => string.IsNullOrWhiteSpace(HardwarePort) || HardwarePort == Description
+        ? $"{Name} - {IPv4Address} ({Description}){(IsPrimaryInternet ? " [PRIMARY]" : "")}"
+        : $"{Name} [{HardwarePort}] - {IPv4Address}{(IsPrimaryInternet ? " [PRIMARY]" : "")}";
 }
 
 public sealed class DiscoverySession
@@ -71,4 +79,61 @@ public sealed class ApplicationSettings
     public int RetainAuditDays { get; set; } = 30;
     public bool IsDemoModeEnabled { get; set; } = false;
     public string? DefaultInterfaceId { get; set; }
+}
+
+public sealed class WifiNetworkInfo
+{
+    public string Ssid { get; set; } = string.Empty;
+    public string? Bssid { get; set; }
+    public int Rssi { get; set; }
+    public int SignalQualityPercent => Math.Clamp((int)((Rssi + 100) * 2), 0, 100);
+    public int Channel { get; set; }
+    public string? Band { get; set; } = "5 GHz";
+    public string Security { get; set; } = "WPA2 Personal";
+    public bool IsCurrent { get; set; }
+    public string? PhyMode { get; set; } = "802.11ax";
+
+    public string SignalText => $"{Rssi} dBm ({SignalQualityPercent}%)";
+}
+
+public sealed class NetworkInventoryReport
+{
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public IReadOnlyList<NetworkInterfaceInfo> Interfaces { get; set; } = [];
+    public NetworkInterfaceInfo? PrimaryInterface { get; set; }
+    public IReadOnlyList<WifiNetworkInfo> WifiNetworks { get; set; } = [];
+    public string? CurrentWifiSsid { get; set; }
+    public bool IsWifiPermitted { get; set; } = true;
+    public string? PermissionMessage { get; set; }
+    public IReadOnlyList<string> SystemDnsServers { get; set; } = [];
+    public string? SystemDefaultGateway { get; set; }
+}
+
+public sealed class NetworkRoutingSnapshot
+{
+    public string? DefaultGateway { get; set; }
+    public string? PrimaryInterfaceName { get; set; }
+    public IReadOnlyList<string> DnsServers { get; set; } = [];
+    public string? CurrentWifiSsid { get; set; }
+    public DateTime CapturedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+public sealed class ReachabilityDiagnostic
+{
+    public string InterfaceName { get; set; } = string.Empty;
+    public bool IsMulticastSupported { get; set; }
+    public bool IsSubnetRoutable { get; set; }
+    public bool HasDefaultGateway { get; set; }
+    public DiagnosticSeverity Severity { get; set; } = DiagnosticSeverity.Info;
+    public string SummaryExplanation { get; set; } = string.Empty;
+    public IReadOnlyList<string> SuggestedActions { get; set; } = [];
+}
+
+public sealed class SubnetScanRequest
+{
+    public NetworkInterfaceInfo TargetInterface { get; set; } = new();
+    public string CidrOrSubnet { get; set; } = string.Empty;
+    public TimeSpan TimeoutPerHost { get; set; } = TimeSpan.FromMilliseconds(400);
+    public int MaxConcurrency { get; set; } = 16;
+    public int ProbePort { get; set; } = 3702;
 }

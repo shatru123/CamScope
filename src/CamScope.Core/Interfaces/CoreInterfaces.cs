@@ -85,3 +85,31 @@ public interface ISettingsService
     Task<ApplicationSettings> LoadSettingsAsync(CancellationToken ct = default);
     Task SaveSettingsAsync(ApplicationSettings settings, CancellationToken ct = default);
 }
+
+public interface INetworkInventoryService
+{
+    Task<NetworkInventoryReport> GetNetworkInventoryAsync(bool forceRefresh = false, CancellationToken ct = default);
+    Task<NetworkRoutingSnapshot> CaptureRoutingSnapshotAsync(CancellationToken ct = default);
+    bool VerifyRoutingInvariant(NetworkRoutingSnapshot before, NetworkRoutingSnapshot after, out string? mutationWarning);
+}
+
+public interface INetworkSelectionService
+{
+    NetworkInterfaceInfo? CurrentScanningInterface { get; }
+    void SelectScanningInterface(NetworkInterfaceInfo iface);
+    event Action<NetworkInterfaceInfo?>? SelectionChanged;
+}
+
+public interface INetworkPermissionService
+{
+    Task<bool> HasWifiScanningPermissionAsync();
+    string GetPermissionExplanation();
+}
+
+public interface ISubnetScanner
+{
+    Task<IReadOnlyList<CameraDevice>> ScanSubnetAsync(
+        SubnetScanRequest request,
+        IProgress<DiscoveryProgressReport>? progress = null,
+        CancellationToken ct = default);
+}

@@ -73,11 +73,33 @@ public enum AuditAction
     DeviceRemoved,
     SettingsChanged,
     InventoryExported,
-    InventoryCleared
+    InventoryCleared,
+    NetworkInterfaceSelected,
+    SubnetScanStarted,
+    SubnetScanCompleted
 }
 
 public enum ThemeMode
 {
     Dark,
     Light
+}
+
+public enum NetworkInterfaceKind
+{
+    Ethernet,
+    WiFi,
+    UsbEthernet,
+    Thunderbolt,
+    Vpn,
+    Loopback,
+    Virtual,
+    Other
+}
+
+public enum DiagnosticSeverity
+{
+    Info,
+    Warning,
+    Error
 }

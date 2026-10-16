@@ -202,3 +202,54 @@ public sealed class DemoModeIntegrationTests
         Assert.Equal(StreamState.Idle, session.State);
     }
 }
+
+public sealed class NetworkExplorerIntegrationTests
+{
+    [Fact]
+    public async Task NetworkInventoryService_CapturesLiveTelemetryAndVerifiesRoutingInvariant()
+    {
+        var inventoryService = new CamScope.Infrastructure.Network.NetworkInventoryService(
+            NullLogger<CamScope.Infrastructure.Network.NetworkInventoryService>.Instance,
+            new CamScope.Infrastructure.Network.NetworkPermissionService());
+
+        var report = await inventoryService.GetNetworkInventoryAsync(forceRefresh: true);
+
+        Assert.NotNull(report);
+        Assert.NotEmpty(report.Interfaces);
+
+        // Capture snapshot before scanning
+        var beforeSnapshot = await inventoryService.CaptureRoutingSnapshotAsync();
+
+        // Perform an app-scoped subnet sweep on loopback (127.0.0.1/32)
+        var scanner = new CamScope.Discovery.Scanning.SubnetScanner(
+            NullLogger<CamScope.Discovery.Scanning.SubnetScanner>.Instance);
+
+        var loopbackIface = report.Interfaces.FirstOrDefault(i => i.IsLoopback) ??
+                            new NetworkInterfaceInfo
+                            {
+                                Name = "lo0",
+                                IPv4Address = "127.0.0.1",
+                                IsLoopback = true
+                            };
+
+        var request = new SubnetScanRequest
+        {
+            TargetInterface = loopbackIface,
+            CidrOrSubnet = "127.0.0.1/32",
+            TimeoutPerHost = TimeSpan.FromMilliseconds(50),
+            MaxConcurrency = 4
+        };
+
+        var devices = await scanner.ScanSubnetAsync(request);
+        Assert.NotNull(devices);
+
+        // Capture snapshot after scanning
+        var afterSnapshot = await inventoryService.CaptureRoutingSnapshotAsync();
+
+        // Verify routing invariant: default gateway and primary interface must remain 100% unchanged
+        bool invariantHeld = inventoryService.VerifyRoutingInvariant(beforeSnapshot, afterSnapshot, out var mutationWarning);
+
+        Assert.True(invariantHeld, $"Routing invariant violated: {mutationWarning}");
+        Assert.Null(mutationWarning);
+    }
+}

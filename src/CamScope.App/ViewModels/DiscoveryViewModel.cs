@@ -28,6 +28,8 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
     public ObservableCollection<NetworkInterfaceInfo> Interfaces { get; } = [];
     public ObservableCollection<CameraDevice> DiscoveredDevices { get; } = [];
 
+    private readonly INetworkSelectionService? _selectionService;
+
     public bool CanStartDiscovery => SelectedInterface != null && IsAuthorizedConfirmed && !IsDiscovering;
 
     public DiscoveryViewModel(
@@ -36,7 +38,8 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
         INetworkInterfaceProvider interfaceProvider,
         IDeviceRepository deviceRepository,
         IAuditService auditService,
-        Func<bool> isDemoModeFunc)
+        Func<bool> isDemoModeFunc,
+        INetworkSelectionService? selectionService = null)
     {
         _realEngine = realEngine;
         _demoEngine = demoEngine;
@@ -44,8 +47,24 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
         _deviceRepository = deviceRepository;
         _auditService = auditService;
         _isDemoModeFunc = isDemoModeFunc;
+        _selectionService = selectionService;
+
+        if (_selectionService != null)
+        {
+            _selectionService.SelectionChanged += OnExternalSelectionChanged;
+        }
 
         LoadInterfaces();
+    }
+
+    private void OnExternalSelectionChanged(NetworkInterfaceInfo? iface)
+    {
+        if (iface == null) return;
+        var matching = Interfaces.FirstOrDefault(i => i.Id == iface.Id || i.IPv4Address == iface.IPv4Address);
+        if (matching != null && matching != SelectedInterface)
+        {
+            SelectedInterface = matching;
+        }
     }
 
     public void LoadInterfaces()
@@ -56,11 +75,25 @@ public sealed partial class DiscoveryViewModel : ViewModelBase
         {
             Interfaces.Add(i);
         }
-        SelectedInterface = Interfaces.FirstOrDefault();
+
+        var currentSelected = _selectionService?.CurrentScanningInterface;
+        if (currentSelected != null)
+        {
+            SelectedInterface = Interfaces.FirstOrDefault(i => i.Id == currentSelected.Id || i.IPv4Address == currentSelected.IPv4Address);
+        }
+
+        SelectedInterface ??= Interfaces.FirstOrDefault();
     }
 
     partial void OnIncludeLoopbackChanged(bool value) => LoadInterfaces();
-    partial void OnSelectedInterfaceChanged(NetworkInterfaceInfo? value) => OnPropertyChanged(nameof(CanStartDiscovery));
+    partial void OnSelectedInterfaceChanged(NetworkInterfaceInfo? value)
+    {
+        OnPropertyChanged(nameof(CanStartDiscovery));
+        if (value != null)
+        {
+            _selectionService?.SelectScanningInterface(value);
+        }
+    }
     partial void OnIsAuthorizedConfirmedChanged(bool value) => OnPropertyChanged(nameof(CanStartDiscovery));
     partial void OnIsDiscoveringChanged(bool value) => OnPropertyChanged(nameof(CanStartDiscovery));
 
