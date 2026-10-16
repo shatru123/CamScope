@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Styling;
 using CamScope.Core.Interfaces;
@@ -30,6 +33,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _isDarkTheme = true;
     [ObservableProperty] private string? _notificationText;
     [ObservableProperty] private bool _hasNotification;
+    [ObservableProperty] private bool _isProfileModalOpen;
 
     public OverviewViewModel OverviewVm => _overviewVm;
     public DiscoveryViewModel DiscoveryVm => _discoveryVm;
@@ -166,5 +170,64 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         HasNotification = false;
         NotificationText = null;
+    }
+
+    [RelayCommand]
+    public void OpenProfileModal() => IsProfileModalOpen = true;
+
+    [RelayCommand]
+    public void CloseProfileModal() => IsProfileModalOpen = false;
+
+    [RelayCommand]
+    public void OpenEmail() => OpenUrl("mailto:ambhoreshatrughna@gmail.com");
+
+    [RelayCommand]
+    public void OpenPhone() => OpenUrl("tel:+919604466334");
+
+    [RelayCommand]
+    public void OpenGitHub() => OpenUrl("https://github.com/shatru123/Learning");
+
+    [RelayCommand]
+    public void OpenPhoto()
+    {
+        var localPath = Path.Combine(AppContext.BaseDirectory, "Assets", "images", "shatrughna.jpg");
+        if (File.Exists(localPath))
+        {
+            OpenUrl(localPath);
+            return;
+        }
+
+        var sourcePath = "/Users/shatrughnaambhore/Shatru/Learning/Projects/DriveMate/shatrughna.jpg";
+        if (File.Exists(sourcePath))
+        {
+            OpenUrl(sourcePath);
+            return;
+        }
+
+        OpenUrl("https://github.com/shatru123");
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                Process.Start("open", url);
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                Process.Start("xdg-open", url);
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            }
+        }
+        catch { }
     }
 }
