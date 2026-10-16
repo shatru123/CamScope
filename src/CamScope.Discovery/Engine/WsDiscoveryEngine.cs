@@ -53,21 +53,7 @@ public sealed class WsDiscoveryEngine : INetworkDiscoveryEngine
         try
         {
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, true);
-            socket.Bind(new IPEndPoint(localIp, 0));
-
-            try
-            {
-                socket.SetSocketOption(
-                    SocketOptionLevel.IP,
-                    SocketOptionName.MulticastInterface,
-                    localIp.GetAddressBytes());
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not set MulticastInterface option for interface {Name}", iface.Name);
-            }
+            var bindingStatus = Scanning.SocketInterfaceBinder.BindSocketToInterface(socket, iface, localIp, isMulticast: true, _logger);
 
             bool joinedMulticast = false;
             try

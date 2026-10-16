@@ -64,7 +64,7 @@ public class NetworkExplorerViewModelTests
                 new WifiNetworkInfo
                 {
                     Ssid = "Camera_Lab",
-                    Rssi = -68,
+                    Rssi = null,
                     Channel = 6,
                     Band = "2.4 GHz",
                     IsCurrent = false
@@ -74,6 +74,13 @@ public class NetworkExplorerViewModelTests
             SystemDefaultGateway = "192.168.31.1",
             SystemDnsServers = ["192.168.31.1", "1.1.1.1"],
             IsWifiPermitted = true
+        };
+
+        public RoutingInvariantResult InvariantToReturn { get; set; } = new()
+        {
+            IsStable = true,
+            VerificationSucceeded = true,
+            StatusText = "Primary routing table invariant confirmed stable"
         };
 
         public Task<NetworkInventoryReport> GetNetworkInventoryAsync(bool forceRefresh = false, CancellationToken ct = default)
@@ -86,10 +93,13 @@ public class NetworkExplorerViewModelTests
                 PrimaryInterfaceName = "en0"
             });
 
+        public RoutingInvariantResult VerifyRoutingInvariant(NetworkRoutingSnapshot? before, NetworkRoutingSnapshot? after)
+            => InvariantToReturn;
+
         public bool VerifyRoutingInvariant(NetworkRoutingSnapshot before, NetworkRoutingSnapshot after, out string? mutationWarning)
         {
-            mutationWarning = null;
-            return true;
+            mutationWarning = InvariantToReturn.IsStable ? null : string.Join("; ", InvariantToReturn.MutationDetails);
+            return InvariantToReturn.IsStable;
         }
     }
 
@@ -379,5 +389,93 @@ public class NetworkExplorerViewModelTests
 
         Assert.NotNull(vm.SubnetErrorMessage);
         Assert.Contains("valid CIDR", vm.SubnetErrorMessage);
+    }
+
+    [Fact]
+    public async Task RefreshInventory_InitializesBindingStatusAndAdapterTopology()
+    {
+        var inventoryService = new FakeNetworkInventoryService();
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var scanner = new FakeSubnetScanner();
+        var repo = new FakeDeviceRepository();
+        var audit = new FakeAuditService();
+
+        var vm = new NetworkExplorerViewModel(
+            inventoryService,
+            selectionService,
+            scanner,
+            repo,
+            audit,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        Assert.True(vm.HasMultiplePhysicalAdapters);
+        Assert.Contains("Multiple active network adapters detected", vm.AdapterTopologyExplanation);
+        Assert.NotNull(vm.BindingStatus);
+        Assert.NotEmpty(vm.BindingStatusText);
+        Assert.True(vm.IsRoutingStable);
+        Assert.Contains("Protected", vm.RoutingStabilityText);
+    }
+
+    [Fact]
+    public async Task WifiNetworks_WithNullRssi_ShowsUnknownSignalText()
+    {
+        var inventoryService = new FakeNetworkInventoryService();
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var scanner = new FakeSubnetScanner();
+        var repo = new FakeDeviceRepository();
+        var audit = new FakeAuditService();
+
+        var vm = new NetworkExplorerViewModel(
+            inventoryService,
+            selectionService,
+            scanner,
+            repo,
+            audit,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        var unknownWifi = vm.WifiNetworks.First(w => w.Ssid == "Camera_Lab");
+        Assert.Null(unknownWifi.Rssi);
+        Assert.False(unknownWifi.HasSignalStrength);
+        Assert.Equal("Unknown (Not reported by OS)", unknownWifi.SignalText);
+    }
+
+    [Fact]
+    public async Task StartSubnetScan_WhenRoutingMutated_DisplaysWarningAndSetsStabilityFalse()
+    {
+        var inventoryService = new FakeNetworkInventoryService();
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var scanner = new FakeSubnetScanner();
+        var repo = new FakeDeviceRepository();
+        var audit = new FakeAuditService();
+
+        var vm = new NetworkExplorerViewModel(
+            inventoryService,
+            selectionService,
+            scanner,
+            repo,
+            audit,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        await vm.RefreshInventoryCommand.ExecuteAsync(null);
+
+        // Simulate a routing mutation reported by inventory service
+        inventoryService.InvariantToReturn = new RoutingInvariantResult
+        {
+            IsStable = false,
+            VerificationSucceeded = true,
+            StatusText = "WARNING: Primary routing mutation detected: Default gateway mutated",
+            MutationDetails = ["Default gateway mutated from 192.168.31.1 to 10.0.0.1"]
+        };
+
+        await vm.StartSubnetScanCommand.ExecuteAsync(null);
+
+        Assert.False(vm.IsRoutingStable);
+        Assert.Contains("WARNING: Primary routing mutation detected", vm.RoutingStabilityText);
+        Assert.NotNull(vm.SubnetErrorMessage);
+        Assert.Contains("Routing warning", vm.SubnetErrorMessage);
     }
 }

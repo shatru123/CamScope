@@ -17,11 +17,13 @@ public sealed class SubnetScanner : ISubnetScanner
     private const int BufferSize = 65536;
 
     private readonly ILogger<SubnetScanner> _logger;
+    private readonly INetworkInventoryService? _inventoryService;
     private readonly DeviceDeduplicator _deduplicator = new();
 
-    public SubnetScanner(ILogger<SubnetScanner> logger)
+    public SubnetScanner(ILogger<SubnetScanner> logger, INetworkInventoryService? inventoryService = null)
     {
         _logger = logger;
+        _inventoryService = inventoryService;
     }
 
     public async Task<IReadOnlyList<CameraDevice>> ScanSubnetAsync(
@@ -47,17 +49,34 @@ public sealed class SubnetScanner : ISubnetScanner
         _logger.LogInformation("Starting directed subnet scan on interface {Interface} ({LocalIp}) across {Count} hosts in {Subnet}",
             request.TargetInterface.Name, localIp, targetHosts.Count, request.CidrOrSubnet);
 
-        ReportProgress(progress, DiscoveryStatus.BindingInterface, 5,
-            $"Binding socket to {request.TargetInterface.Name} ({localIp})...", 0);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        NetworkRoutingSnapshot? beforeRouting = null;
+        if (_inventoryService != null)
+        {
+            try
+            {
+                beforeRouting = await _inventoryService.CaptureRoutingSnapshotAsync(linkedCts.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not capture pre-scan routing snapshot");
+            }
+        }
 
         Socket? socket = null;
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        InterfaceBindingStatus bindingStatus;
 
         try
         {
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            socket.Bind(new IPEndPoint(localIp, 0));
+            bindingStatus = SocketInterfaceBinder.BindSocketToInterface(socket, request.TargetInterface, localIp, isMulticast: false, _logger);
+
+            string bindingStep = bindingStatus.IsStrictlyBound
+                ? $"Bound and pinned to {request.TargetInterface.Name}: {bindingStatus.BindingMethod}"
+                : $"Bound to {localIp}. Limitation: {bindingStatus.LimitationWarning}";
+
+            ReportProgress(progress, DiscoveryStatus.BindingInterface, 10, bindingStep, 0);
 
             var receiveBuffer = new byte[BufferSize];
             var receivingCts = CancellationTokenSource.CreateLinkedTokenSource(linkedCts.Token);
@@ -78,7 +97,7 @@ public sealed class SubnetScanner : ISubnetScanner
                         if (receiveResult.ReceivedBytes > 0)
                         {
                             var responseXml = Encoding.UTF8.GetString(receiveBuffer, 0, receiveResult.ReceivedBytes);
-                            ProcessResponse(responseXml, request, progress);
+                            ProcessResponse(responseXml, request, bindingStatus, progress);
                         }
                     }
                     catch (OperationCanceledException)
@@ -171,9 +190,32 @@ public sealed class SubnetScanner : ISubnetScanner
             }
 
             var results = _deduplicator.GetAll();
-            ReportProgress(progress, DiscoveryStatus.Completed, 100,
-                $"Subnet scan completed. Found {results.Count} camera(s).", results.Count);
+            string completionStatus = $"Subnet scan completed. Found {results.Count} camera(s).";
 
+            if (_inventoryService != null && beforeRouting != null)
+            {
+                try
+                {
+                    var afterRouting = await _inventoryService.CaptureRoutingSnapshotAsync(linkedCts.Token).ConfigureAwait(false);
+                    var invariant = _inventoryService.VerifyRoutingInvariant(beforeRouting, afterRouting);
+                    if (!invariant.IsStable)
+                    {
+                        _logger.LogWarning("Routing invariant check detected mutation: {Details}", invariant.MutationDetails);
+                        completionStatus = $"Subnet scan completed ({results.Count} cameras). WARNING: {invariant.MutationDetails}";
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Routing invariant confirmed: {Status}", invariant.StatusText);
+                        completionStatus = $"Subnet scan completed. Found {results.Count} camera(s). Connection integrity confirmed stable.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not capture post-scan routing snapshot");
+                }
+            }
+
+            ReportProgress(progress, DiscoveryStatus.Completed, 100, completionStatus, results.Count);
             return results;
         }
         catch (OperationCanceledException)
@@ -200,6 +242,7 @@ public sealed class SubnetScanner : ISubnetScanner
     private void ProcessResponse(
         string responseXml,
         SubnetScanRequest request,
+        InterfaceBindingStatus bindingStatus,
         IProgress<DiscoveryProgressReport>? progress)
     {
         try
@@ -216,6 +259,21 @@ public sealed class SubnetScanner : ISubnetScanner
                 if (!dev.Tags.Contains(sourceTag))
                 {
                     dev.Tags.Add(sourceTag);
+                }
+
+                var bindingTag = $"Binding:{bindingStatus.BindingMethod}";
+                if (!dev.Tags.Contains(bindingTag))
+                {
+                    dev.Tags.Add(bindingTag);
+                }
+
+                if (!bindingStatus.IsStrictlyBound)
+                {
+                    const string warningTag = "Binding:UnpinnedRoutingFallback";
+                    if (!dev.Tags.Contains(warningTag))
+                    {
+                        dev.Tags.Add(warningTag);
+                    }
                 }
 
                 var isNew = _deduplicator.TryAddOrUpdate(dev, out var current);

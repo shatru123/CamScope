@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using CamScope.Core.Enums;
 using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
+using CamScope.Discovery.Scanning;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -30,6 +31,15 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
     [ObservableProperty] private NetworkInterfaceInfo? _primaryInterface;
     [ObservableProperty] private NetworkInterfaceInfo? _selectedScanningInterface;
     [ObservableProperty] private WifiNetworkInfo? _selectedWifiNetwork;
+
+    [ObservableProperty] private InterfaceBindingStatus? _bindingStatus;
+    [ObservableProperty] private string _bindingStatusText = "Interface binding uninitialized";
+    [ObservableProperty] private bool _isStrictBindingActive;
+
+    [ObservableProperty] private string _routingStabilityText = "Routing table invariant: Protected (Default route, DNS, and primary interface unchanged)";
+    [ObservableProperty] private bool _isRoutingStable = true;
+    [ObservableProperty] private bool _hasMultiplePhysicalAdapters;
+    [ObservableProperty] private string _adapterTopologyExplanation = string.Empty;
 
     [ObservableProperty] private bool _isWifiPermitted = true;
     [ObservableProperty] private string? _permissionExplanation;
@@ -110,6 +120,18 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
             IsWifiPermitted = report.IsWifiPermitted;
             PermissionExplanation = report.PermissionMessage;
 
+            // Evaluate multi-adapter physical topology
+            var activePhysicalAdapters = Interfaces.Where(i => !i.IsLoopback && i.IsUp).ToList();
+            HasMultiplePhysicalAdapters = activePhysicalAdapters.Count > 1;
+            if (HasMultiplePhysicalAdapters)
+            {
+                AdapterTopologyExplanation = $"Multiple active network adapters detected ({string.Join(", ", activePhysicalAdapters.Select(a => $"{a.Name} [{a.HardwarePort}]"))}). CamScope can bind camera discovery and streaming to a secondary adapter without altering your primary internet connection.";
+            }
+            else
+            {
+                AdapterTopologyExplanation = "Single active network adapter detected. Note: A single physical Wi-Fi radio cannot be joined to two SSIDs simultaneously. For an isolated camera network, connect a secondary physical adapter (such as a USB-C Ethernet or Thunderbolt adapter) to discover cameras without affecting your internet connection.";
+            }
+
             // Maintain or initialize selected interface
             var currentSelected = _selectionService.CurrentScanningInterface;
             if (currentSelected != null && Interfaces.Any(i => i.Id == currentSelected.Id))
@@ -125,6 +147,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
                 }
             }
 
+            UpdateBindingStatus(SelectedScanningInterface);
             UpdateSubnetInputFromInterface(SelectedScanningInterface);
             UpdateReachabilityDiagnostic();
         }
@@ -140,6 +163,8 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
 
     partial void OnSelectedScanningInterfaceChanged(NetworkInterfaceInfo? value)
     {
+        UpdateBindingStatus(value);
+
         if (value != null)
         {
             _selectionService.SelectScanningInterface(value);
@@ -152,6 +177,13 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
         }
 
         UpdateReachabilityDiagnostic();
+    }
+
+    private void UpdateBindingStatus(NetworkInterfaceInfo? iface)
+    {
+        BindingStatus = SocketInterfaceBinder.InspectBindingSupport(iface);
+        IsStrictBindingActive = BindingStatus.IsStrictlyBound;
+        BindingStatusText = BindingStatus.Description;
     }
 
     private void UpdateSubnetInputFromInterface(NetworkInterfaceInfo? iface)
@@ -222,6 +254,16 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
             }
         });
 
+        NetworkRoutingSnapshot? beforeRouting = null;
+        try
+        {
+            beforeRouting = await _inventoryService.CaptureRoutingSnapshotAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not capture pre-scan routing snapshot");
+        }
+
         try
         {
             var request = new SubnetScanRequest
@@ -267,6 +309,22 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase
             IsScanningSubnet = false;
             _subnetScanCts?.Dispose();
             _subnetScanCts = null;
+
+            try
+            {
+                var afterRouting = await _inventoryService.CaptureRoutingSnapshotAsync();
+                var invariant = _inventoryService.VerifyRoutingInvariant(beforeRouting, afterRouting);
+                IsRoutingStable = invariant.IsStable;
+                RoutingStabilityText = invariant.StatusText;
+                if (!invariant.IsStable && invariant.MutationDetails.Count > 0)
+                {
+                    SubnetErrorMessage = $"Routing warning: {string.Join("; ", invariant.MutationDetails)}";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not verify post-scan routing invariant");
+            }
         }
     }
 

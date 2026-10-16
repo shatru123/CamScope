@@ -103,4 +103,28 @@ public class SubnetScannerTests
         var results = await scanner.ScanSubnetAsync(request, ct: cts.Token);
         Assert.NotNull(results);
     }
+
+    [Fact]
+    public async Task ScanSubnetAsync_OverlappingSubnetInterface_BindsCorrectlyWithoutThrowing()
+    {
+        var scanner = new SubnetScanner(NullLogger<SubnetScanner>.Instance);
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        // Simulate an adapter configured with overlapping subnet
+        var request = new SubnetScanRequest
+        {
+            TargetInterface = new NetworkInterfaceInfo
+            {
+                Name = "en3",
+                InterfaceIndex = 12,
+                IPv4Address = "192.168.1.150"
+            },
+            CidrOrSubnet = "192.168.1.150/32",
+            TimeoutPerHost = TimeSpan.FromMilliseconds(50),
+            MaxConcurrency = 1
+        };
+
+        var results = await scanner.ScanSubnetAsync(request, ct: cts.Token);
+        Assert.NotNull(results);
+    }
 }

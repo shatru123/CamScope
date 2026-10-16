@@ -22,7 +22,7 @@
 
         <!-- Primary Connection Protection Banner (Green Card) -->
         <Border Classes="card" Background="#0D1F17" BorderBrush="{StaticResource GreenSuccess}" BorderThickness="1">
-          <Grid RowDefinitions="Auto, Auto" ColumnDefinitions="Auto, *">
+          <Grid RowDefinitions="Auto, Auto, Auto" ColumnDefinitions="Auto, *">
             <Border Grid.Row="0" Grid.Column="0" Classes="badgeSuccess" VerticalAlignment="Center" Margin="0,0,12,0">
               <TextBlock Text="✓ INTERNET CONNECTION PROTECTED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
             </Border>
@@ -60,27 +60,55 @@
                 </StackPanel>
               </Border>
             </Grid>
+
+            <!-- Routing Invariant Verification Status -->
+            <Border Grid.Row="2" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="10,8" CornerRadius="6"
+                    Background="#14261D" BorderBrush="#1C402E" BorderThickness="1">
+              <Grid ColumnDefinitions="Auto, *">
+                <Border Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"
+                        Classes="badgeSuccess" IsVisible="{Binding IsRoutingStable}">
+                  <TextBlock Text="ROUTING INVARIANT CONFIRMED" FontSize="10" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                </Border>
+                <Border Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"
+                        Classes="badgeWarning" IsVisible="{Binding !IsRoutingStable}">
+                  <TextBlock Text="ROUTING MUTATION DETECTED" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+                </Border>
+                <TextBlock Grid.Column="1" Text="{Binding RoutingStabilityText}"
+                           FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+              </Grid>
+            </Border>
           </Grid>
         </Border>
 
         <!-- Active Scanning Binding & Diagnostics -->
         <Border Classes="card" Background="#0C1A2E" BorderBrush="{StaticResource CyanAccent}" BorderThickness="1">
           <StackPanel Spacing="10">
-            <Grid ColumnDefinitions="Auto, *, Auto">
+            <Grid ColumnDefinitions="Auto, *, Auto, Auto">
               <Border Grid.Column="0" Classes="badgeCyan" VerticalAlignment="Center" Margin="0,0,12,0">
                 <TextBlock Text="ACTIVE DISCOVERY BINDING" FontSize="11" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
               </Border>
               <TextBlock Grid.Column="1"
                          Text="{Binding SelectedScanningInterface.DisplayText, FallbackValue='No interface selected'}"
                          FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
-              <Border Grid.Column="2" Classes="badgeViolet" VerticalAlignment="Center"
+              <Border Grid.Column="2" Classes="badgeSuccess" VerticalAlignment="Center" Margin="0,0,6,0"
+                      IsVisible="{Binding IsStrictBindingActive}">
+                <TextBlock Text="✓ Strict Egress Pinning" FontSize="10" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+              </Border>
+              <Border Grid.Column="2" Classes="badgeWarning" VerticalAlignment="Center" Margin="0,0,6,0"
+                      IsVisible="{Binding !IsStrictBindingActive}">
+                <TextBlock Text="⚠ Unpinned Routing Fallback" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+              </Border>
+              <Border Grid.Column="3" Classes="badgeViolet" VerticalAlignment="Center"
                       IsVisible="{Binding SelectedScanningInterface.IsPrimaryInternet}">
                 <TextBlock Text="System Default Route" FontSize="10" FontWeight="Bold" Foreground="{StaticResource VioletAccent}"/>
               </Border>
             </Grid>
 
+            <!-- Binding Status Detail Text -->
+            <TextBlock Text="{Binding BindingStatusText}" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+
             <!-- Diagnostic Explanations -->
-            <Border Background="#10233B" Padding="10" CornerRadius="6" Margin="0,4,0,0">
+            <Border Background="#10233B" Padding="10" CornerRadius="6" Margin="0,2,0,0">
               <StackPanel Spacing="6">
                 <TextBlock Text="{Binding Reachability.SummaryExplanation}"
                            FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
@@ -95,6 +123,17 @@
               </StackPanel>
             </Border>
           </StackPanel>
+        </Border>
+
+        <!-- Physical Adapter Topology & Multi-Adapter Guidance Card -->
+        <Border Classes="card" Background="#141B2D" BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1">
+          <Grid ColumnDefinitions="Auto, *">
+            <Border Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Classes="badgeCyan">
+              <TextBlock Text="ADAPTER TOPOLOGY" FontSize="10" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+            </Border>
+            <TextBlock Grid.Column="1" Text="{Binding AdapterTopologyExplanation}"
+                       FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+          </Grid>
         </Border>
 
         <!-- Network Adapters Section -->
@@ -145,8 +184,8 @@
             <StackPanel Spacing="12">
               <Grid ColumnDefinitions="*, Auto">
                 <StackPanel Grid.Column="0">
-                  <TextBlock Text="Nearby Wi-Fi Networks" Classes="cardTitle"/>
-                  <TextBlock Text="macOS CoreWLAN telemetry. Joining a network is an OS-level operation." FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                  <TextBlock Text="Nearby Wi-Fi Environment (Informational Only)" Classes="cardTitle"/>
+                  <TextBlock Text="Read-only macOS Wi-Fi environment telemetry. Selecting an SSID will NOT switch your Mac's network. Joining is strictly an OS-level operation." FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding WifiNetworks.Count, StringFormat='{}{0} Detected'}"
                            FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>

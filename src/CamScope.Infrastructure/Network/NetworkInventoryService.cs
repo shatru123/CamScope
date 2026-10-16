@@ -81,25 +81,75 @@ public sealed class NetworkInventoryService : INetworkInventoryService
         };
     }
 
-    public bool VerifyRoutingInvariant(NetworkRoutingSnapshot before, NetworkRoutingSnapshot after, out string? mutationWarning)
+    public RoutingInvariantResult VerifyRoutingInvariant(NetworkRoutingSnapshot? before, NetworkRoutingSnapshot? after)
     {
-        ArgumentNullException.ThrowIfNull(before);
-        ArgumentNullException.ThrowIfNull(after);
+        if (before == null || after == null)
+        {
+            return new RoutingInvariantResult
+            {
+                IsStable = false,
+                VerificationSucceeded = false,
+                StatusText = "Unable to verify routing invariant (routing snapshot data incomplete).",
+                BeforeSnapshot = before,
+                AfterSnapshot = after
+            };
+        }
+
+        var mutations = new List<string>();
 
         if (!string.Equals(before.DefaultGateway, after.DefaultGateway, StringComparison.OrdinalIgnoreCase))
         {
-            mutationWarning = $"Default gateway mutated! Before: '{before.DefaultGateway}', After: '{after.DefaultGateway}'. System connection may have been altered.";
-            return false;
+            mutations.Add($"Default gateway changed from '{before.DefaultGateway ?? "None"}' to '{after.DefaultGateway ?? "None"}'.");
         }
 
         if (!string.Equals(before.PrimaryInterfaceName, after.PrimaryInterfaceName, StringComparison.OrdinalIgnoreCase))
         {
-            mutationWarning = $"Primary network interface mutated! Before: '{before.PrimaryInterfaceName}', After: '{after.PrimaryInterfaceName}'.";
-            return false;
+            mutations.Add($"Primary network interface changed from '{before.PrimaryInterfaceName ?? "None"}' to '{after.PrimaryInterfaceName ?? "None"}'.");
         }
 
-        mutationWarning = null;
-        return true;
+        var beforeDns = new HashSet<string>(before.DnsServers ?? [], StringComparer.OrdinalIgnoreCase);
+        var afterDns = new HashSet<string>(after.DnsServers ?? [], StringComparer.OrdinalIgnoreCase);
+        if (!beforeDns.SetEquals(afterDns))
+        {
+            mutations.Add($"DNS servers changed from [{string.Join(", ", before.DnsServers ?? [])}] to [{string.Join(", ", after.DnsServers ?? [])}].");
+        }
+
+        if (!string.Equals(before.CurrentWifiSsid, after.CurrentWifiSsid, StringComparison.OrdinalIgnoreCase))
+        {
+            mutations.Add($"Active Wi-Fi SSID changed from '{before.CurrentWifiSsid ?? "None"}' to '{after.CurrentWifiSsid ?? "None"}'.");
+        }
+
+        if (mutations.Count > 0)
+        {
+            return new RoutingInvariantResult
+            {
+                IsStable = false,
+                VerificationSucceeded = true,
+                StatusText = "System Route / Connection Mutation Detected!",
+                MutationDetails = mutations,
+                BeforeSnapshot = before,
+                AfterSnapshot = after
+            };
+        }
+
+        return new RoutingInvariantResult
+        {
+            IsStable = true,
+            VerificationSucceeded = true,
+            StatusText = $"Confirmed Stable: Gateway ({before.DefaultGateway ?? "None"}), Primary Interface ({before.PrimaryInterfaceName ?? "None"}), DNS ({string.Join(", ", before.DnsServers ?? [])}), and Wi-Fi SSID ({before.CurrentWifiSsid ?? "None"}) remained unmodified.",
+            MutationDetails = [],
+            BeforeSnapshot = before,
+            AfterSnapshot = after
+        };
+    }
+
+    public bool VerifyRoutingInvariant(NetworkRoutingSnapshot before, NetworkRoutingSnapshot after, out string? mutationWarning)
+    {
+        var result = VerifyRoutingInvariant(before, after);
+        mutationWarning = result.IsStable
+            ? null
+            : (result.MutationDetails.Count > 0 ? string.Join("; ", result.MutationDetails) : result.StatusText);
+        return result.IsStable;
     }
 
     private async Task<NetworkInventoryReport> BuildInventoryReportAsync(CancellationToken ct)
@@ -184,7 +234,8 @@ public sealed class NetworkInventoryService : INetworkInventoryService
                     IsLoopback = isLoopback,
                     IsPrimaryInternet = isPrimary,
                     InterfaceKind = kind,
-                    SpeedBytesPerSec = iface.Speed
+                    SpeedBytesPerSec = iface.Speed,
+                    InterfaceIndex = ResolveInterfaceIndex(iface)
                 });
             }
         }
@@ -519,7 +570,7 @@ public sealed class NetworkInventoryService : INetworkInventoryService
                     {
                         Ssid = ssid,
                         IsCurrent = inCurrentNetwork,
-                        Rssi = inCurrentNetwork ? -50 : -65 // Default baseline if not explicitly parsed
+                        Rssi = null // Strictly null until matched from a genuine 'Signal / Noise:' line
                     };
 
                     if (inCurrentNetwork)
@@ -573,9 +624,9 @@ public sealed class NetworkInventoryService : INetworkInventoryService
         // Deduplicate by SSID, preserving IsCurrent if duplicate
         var deduped = networks
             .GroupBy(n => n.Ssid, StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.OrderByDescending(n => n.IsCurrent).ThenByDescending(n => n.Rssi).First())
+            .Select(g => g.OrderByDescending(n => n.IsCurrent).ThenByDescending(n => n.Rssi ?? -999).First())
             .OrderByDescending(n => n.IsCurrent)
-            .ThenByDescending(n => n.Rssi)
+            .ThenByDescending(n => n.Rssi ?? -999)
             .ToList();
 
         return (currentSsid, deduped);
@@ -617,5 +668,37 @@ public sealed class NetworkInventoryService : INetworkInventoryService
             try { process.Kill(entireProcessTree: true); } catch { }
             throw new TimeoutException($"Command '{fileName} {arguments}' timed out after {_processTimeout.TotalSeconds}s");
         }
+    }
+
+    [DllImport("libc", EntryPoint = "if_nametoindex", CharSet = CharSet.Ansi)]
+    private static extern uint IfNameToIndex(string ifname);
+
+    private static int ResolveInterfaceIndex(NetworkInterface iface)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            try
+            {
+                uint idx = IfNameToIndex(iface.Name);
+                if (idx > 0) return (int)idx;
+            }
+            catch { }
+        }
+
+        try
+        {
+            var ipv4 = iface.GetIPProperties().GetIPv4Properties();
+            if (ipv4?.Index > 0) return ipv4.Index;
+        }
+        catch { }
+
+        try
+        {
+            var ipv6 = iface.GetIPProperties().GetIPv6Properties();
+            if (ipv6?.Index > 0) return ipv6.Index;
+        }
+        catch { }
+
+        return 0;
     }
 }

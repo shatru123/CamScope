@@ -125,6 +125,9 @@ Wi-Fi:
 
         var warehouse = networks.First(n => n.Ssid == "Warehouse_IoT");
         Assert.False(warehouse.IsCurrent);
+        Assert.Null(warehouse.Rssi);
+        Assert.False(warehouse.HasSignalStrength);
+        Assert.Equal("Unknown (Not reported by OS)", warehouse.SignalText);
         Assert.Equal("2.4 GHz", warehouse.Band);
         Assert.Equal(6, warehouse.Channel);
     }
@@ -153,16 +156,26 @@ Wi-Fi:
         var before = new NetworkRoutingSnapshot
         {
             DefaultGateway = "192.168.1.1",
-            PrimaryInterfaceName = "en0"
+            PrimaryInterfaceName = "en0",
+            DnsServers = ["1.1.1.1", "8.8.8.8"],
+            CurrentWifiSsid = "Office_5G"
         };
         var after = new NetworkRoutingSnapshot
         {
             DefaultGateway = "192.168.1.1",
-            PrimaryInterfaceName = "en0"
+            PrimaryInterfaceName = "en0",
+            DnsServers = ["8.8.8.8", "1.1.1.1"],
+            CurrentWifiSsid = "Office_5G"
         };
 
-        bool ok = service.VerifyRoutingInvariant(before, after, out var warning);
-        Assert.True(ok);
+        var result = service.VerifyRoutingInvariant(before, after);
+        Assert.True(result.IsStable);
+        Assert.True(result.VerificationSucceeded);
+        Assert.Empty(result.MutationDetails);
+        Assert.Contains("Confirmed Stable", result.StatusText);
+
+        bool legacyOk = service.VerifyRoutingInvariant(before, after, out var warning);
+        Assert.True(legacyOk);
         Assert.Null(warning);
     }
 
@@ -184,10 +197,15 @@ Wi-Fi:
             PrimaryInterfaceName = "en0"
         };
 
+        var result = service.VerifyRoutingInvariant(before, after);
+        Assert.False(result.IsStable);
+        Assert.Single(result.MutationDetails);
+        Assert.Contains("Default gateway changed", result.MutationDetails[0]);
+
         bool ok = service.VerifyRoutingInvariant(before, after, out var warning);
         Assert.False(ok);
         Assert.NotNull(warning);
-        Assert.Contains("Default gateway mutated", warning);
+        Assert.Contains("Default gateway changed", warning);
     }
 
     [Fact]
@@ -208,9 +226,58 @@ Wi-Fi:
             PrimaryInterfaceName = "en3"
         };
 
-        bool ok = service.VerifyRoutingInvariant(before, after, out var warning);
-        Assert.False(ok);
-        Assert.NotNull(warning);
-        Assert.Contains("Primary network interface mutated", warning);
+        var result = service.VerifyRoutingInvariant(before, after);
+        Assert.False(result.IsStable);
+        Assert.Contains(result.MutationDetails, m => m.Contains("Primary network interface changed"));
+    }
+
+    [Fact]
+    public void VerifyRoutingInvariant_DetectsMutatedDnsServers()
+    {
+        var service = new NetworkInventoryService(
+            NullLogger<NetworkInventoryService>.Instance,
+            new NetworkPermissionService());
+
+        var before = new NetworkRoutingSnapshot
+        {
+            DefaultGateway = "192.168.1.1",
+            PrimaryInterfaceName = "en0",
+            DnsServers = ["1.1.1.1"]
+        };
+        var after = new NetworkRoutingSnapshot
+        {
+            DefaultGateway = "192.168.1.1",
+            PrimaryInterfaceName = "en0",
+            DnsServers = ["9.9.9.9"]
+        };
+
+        var result = service.VerifyRoutingInvariant(before, after);
+        Assert.False(result.IsStable);
+        Assert.Contains(result.MutationDetails, m => m.Contains("DNS servers changed"));
+    }
+
+    [Fact]
+    public void VerifyRoutingInvariant_DetectsMutatedWifiSsid()
+    {
+        var service = new NetworkInventoryService(
+            NullLogger<NetworkInventoryService>.Instance,
+            new NetworkPermissionService());
+
+        var before = new NetworkRoutingSnapshot
+        {
+            DefaultGateway = "192.168.1.1",
+            PrimaryInterfaceName = "en0",
+            CurrentWifiSsid = "Corporate_WiFi"
+        };
+        var after = new NetworkRoutingSnapshot
+        {
+            DefaultGateway = "192.168.1.1",
+            PrimaryInterfaceName = "en0",
+            CurrentWifiSsid = "Rogue_AP"
+        };
+
+        var result = service.VerifyRoutingInvariant(before, after);
+        Assert.False(result.IsStable);
+        Assert.Contains(result.MutationDetails, m => m.Contains("Active Wi-Fi SSID changed"));
     }
 }

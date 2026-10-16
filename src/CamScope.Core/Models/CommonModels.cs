@@ -19,6 +19,7 @@ public sealed class NetworkInterfaceInfo
     public bool IsPrimaryInternet { get; set; }
     public NetworkInterfaceKind InterfaceKind { get; set; } = NetworkInterfaceKind.Other;
     public long SpeedBytesPerSec { get; set; }
+    public int InterfaceIndex { get; set; }
 
     public string DisplayText => string.IsNullOrWhiteSpace(HardwarePort) || HardwarePort == Description
         ? $"{Name} - {IPv4Address} ({Description}){(IsPrimaryInternet ? " [PRIMARY]" : "")}"
@@ -85,15 +86,43 @@ public sealed class WifiNetworkInfo
 {
     public string Ssid { get; set; } = string.Empty;
     public string? Bssid { get; set; }
-    public int Rssi { get; set; }
-    public int SignalQualityPercent => Math.Clamp((int)((Rssi + 100) * 2), 0, 100);
+    public int? Rssi { get; set; }
+    public bool HasSignalStrength => Rssi.HasValue;
+    public int SignalQualityPercent => Rssi.HasValue
+        ? Math.Clamp((int)((Rssi.Value + 100) * 2), 0, 100)
+        : 0;
     public int Channel { get; set; }
     public string? Band { get; set; } = "5 GHz";
     public string Security { get; set; } = "WPA2 Personal";
     public bool IsCurrent { get; set; }
     public string? PhyMode { get; set; } = "802.11ax";
 
-    public string SignalText => $"{Rssi} dBm ({SignalQualityPercent}%)";
+    public string SignalText => Rssi.HasValue
+        ? $"{Rssi.Value} dBm ({SignalQualityPercent}%)"
+        : "Unknown (Not reported by OS)";
+}
+
+public sealed class RoutingInvariantResult
+{
+    public bool IsStable { get; set; }
+    public bool VerificationSucceeded { get; set; }
+    public string StatusText { get; set; } = string.Empty;
+    public IReadOnlyList<string> MutationDetails { get; set; } = [];
+    public NetworkRoutingSnapshot? BeforeSnapshot { get; set; }
+    public NetworkRoutingSnapshot? AfterSnapshot { get; set; }
+}
+
+public sealed class InterfaceBindingStatus
+{
+    public bool IsStrictlyBound { get; set; }
+    public string InterfaceName { get; set; } = string.Empty;
+    public int InterfaceIndex { get; set; }
+    public string LocalIp { get; set; } = string.Empty;
+    public string BindingMethod { get; set; } = string.Empty;
+    public string? LimitationWarning { get; set; }
+    public string Description => IsStrictlyBound
+        ? $"Strict OS Egress Pinning Active: {BindingMethod} on {InterfaceName} (Index {InterfaceIndex})"
+        : $"App-Scoped Local IP Bound ({LocalIp}). {LimitationWarning ?? "Egress follows system routing table."}";
 }
 
 public sealed class NetworkInventoryReport

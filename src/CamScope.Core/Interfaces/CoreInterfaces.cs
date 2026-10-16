@@ -90,6 +90,7 @@ public interface INetworkInventoryService
 {
     Task<NetworkInventoryReport> GetNetworkInventoryAsync(bool forceRefresh = false, CancellationToken ct = default);
     Task<NetworkRoutingSnapshot> CaptureRoutingSnapshotAsync(CancellationToken ct = default);
+    RoutingInvariantResult VerifyRoutingInvariant(NetworkRoutingSnapshot? before, NetworkRoutingSnapshot? after);
     bool VerifyRoutingInvariant(NetworkRoutingSnapshot before, NetworkRoutingSnapshot after, out string? mutationWarning);
 }
 
