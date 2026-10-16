@@ -14,6 +14,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly LiveMonitoringViewModel _liveVm;
     private readonly RecordingsViewModel _recordingsVm;
     private readonly NetworkExplorerViewModel _networkExplorerVm;
+    private readonly WifiSecurityViewModel _wifiSecurityVm;
     private readonly DeviceGroupsViewModel _groupsVm;
     private readonly DiagnosticsViewModel _diagnosticsVm;
     private readonly AuditLogViewModel _auditVm;
@@ -36,6 +37,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public LiveMonitoringViewModel LiveVm => _liveVm;
     public RecordingsViewModel RecordingsVm => _recordingsVm;
     public NetworkExplorerViewModel NetworkExplorerVm => _networkExplorerVm;
+    public WifiSecurityViewModel WifiSecurityVm => _wifiSecurityVm;
     public DeviceGroupsViewModel GroupsVm => _groupsVm;
     public DiagnosticsViewModel DiagnosticsVm => _diagnosticsVm;
     public AuditLogViewModel AuditVm => _auditVm;
@@ -48,6 +50,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         LiveMonitoringViewModel liveVm,
         RecordingsViewModel recordingsVm,
         NetworkExplorerViewModel networkExplorerVm,
+        WifiSecurityViewModel wifiSecurityVm,
         DeviceGroupsViewModel groupsVm,
         DiagnosticsViewModel diagnosticsVm,
         AuditLogViewModel auditVm,
@@ -61,6 +64,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _liveVm = liveVm;
         _recordingsVm = recordingsVm;
         _networkExplorerVm = networkExplorerVm;
+        _wifiSecurityVm = wifiSecurityVm;
         _groupsVm = groupsVm;
         _diagnosticsVm = diagnosticsVm;
         _auditVm = auditVm;
@@ -110,10 +114,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             3 => _liveVm,
             4 => _recordingsVm,
             5 => _networkExplorerVm,
-            6 => _groupsVm,
-            7 => _diagnosticsVm,
-            8 => _auditVm,
-            9 => _settingsVm,
+            6 => _wifiSecurityVm,
+            7 => _groupsVm,
+            8 => _diagnosticsVm,
+            9 => _auditVm,
+            10 => _settingsVm,
             _ => _overviewVm
         };
 
@@ -123,10 +128,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (value == 3) _ = _liveVm.LoadCamerasAsync();
         if (value == 4) _ = _recordingsVm.LoadDevicesAsync();
         if (value == 5) _ = _networkExplorerVm.RefreshInventoryAsync();
-        if (value == 6) _ = _groupsVm.LoadGroupsAsync();
-        if (value == 7) _diagnosticsVm.RefreshDiagnostics();
-        if (value == 8) _ = _auditVm.LoadLogsAsync();
-        if (value == 9) _ = _settingsVm.LoadSettingsAsync();
+        if (value == 6) _ = _wifiSecurityVm.StartScanAsync();
+        if (value == 7) _ = _groupsVm.LoadGroupsAsync();
+        if (value == 8) _diagnosticsVm.RefreshDiagnostics();
+        if (value == 9) _ = _auditVm.LoadLogsAsync();
+        if (value == 10) _ = _settingsVm.LoadSettingsAsync();
     }
 
     public void NavigateToIndex(int index)

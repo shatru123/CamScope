@@ -131,3 +131,30 @@ public interface ISubnetScanner
         IProgress<DiscoveryProgressReport>? progress = null,
         CancellationToken ct = default);
 }
+
+public interface IWifiSecurityScanner
+{
+    bool IsPlatformSupported { get; }
+    Task<WifiScanSessionResult> ScanAsync(CancellationToken ct = default);
+}
+
+public interface IWifiSecurityAnalyzer
+{
+    SecurityAssessmentReport Analyze(IReadOnlyList<WifiAccessPointObservation> observations);
+}
+
+public interface IPasswordStrengthEstimator
+{
+    PasswordStrengthEstimate Estimate(string password);
+}
+
+public interface IWifiSecurityRepository
+{
+    Task SaveScanSessionAsync(WifiScanSession session, CancellationToken ct = default);
+    Task<IReadOnlyList<WifiScanSession>> GetScanHistoryAsync(int limit = 50, CancellationToken ct = default);
+    Task DeleteScanSessionAsync(string id, CancellationToken ct = default);
+    Task ClearScanHistoryAsync(CancellationToken ct = default);
+    Task SaveAuditRecordAsync(AuthorizedAuditRecord record, CancellationToken ct = default);
+    Task<IReadOnlyList<AuthorizedAuditRecord>> GetAuditRecordsAsync(string? ssid = null, CancellationToken ct = default);
+    Task DeleteAuditRecordAsync(string id, CancellationToken ct = default);
+}

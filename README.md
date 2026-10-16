@@ -77,8 +77,18 @@ CamScope is a cross-platform desktop application designed for security operators
   - **Multi-Point Reachability Diagnostics**: Analyzes selected interface link state, loopback status, multicast readiness, and gateway availability with actionable operator recommendations.
   - **Routing Invariant Verification**: Captures before-and-after routing snapshots to cryptographically and structurally verify that no system routes or gateways were altered during scans.
 
+- **Passive Wi-Fi Vulnerability Assessment**
+  - **Zero-Disruption Passive Beacon Capture**: Scans and evaluates nearby 802.11 wireless networks strictly from broadcast beacon Information Elements without connecting, sending association/deauthentication frames, or injecting packets.
+  - **Full Observable Telemetry**: Captures SSID, BSSID (MAC), RSSI dBm, signal quality %, channel, frequency band (2.4 GHz, 5 GHz, 6 GHz), PHY mode (802.11a/b/g/n/ac/ax/be), and security standards.
+  - **Verifiable Weakness Detection**: Passive findings engine flags unencrypted Open networks (High severity), deprecated WEP (Critical severity), legacy WPA1/TKIP (High severity), and WPS advertisement (Medium severity).
+  - **Duplicate SSID & Rogue AP Analysis**: Discovers multiple access points sharing identical SSIDs and analyzes security parity; legitimate multi-AP mesh roaming is distinguished from conflicting security configurations (potential rogue AP / evil twin indicator) without asserting definitive malice.
+  - **Honest Observability & PMF Classification**: Accurately distinguishes observable WPA3 mandatory PMF (Protected Management Frames / 802.11w) from unobservable WPA2 PMF settings, honestly marking ambiguous parameters as `Unknown / Requires Router Verification`.
+  - **Authorized Audit Checklist Workflow**: Operator-assisted defensive audit mode with explicit authorization confirmation, guiding verification of router admin credentials, WPS deactivation, PMF enforcement, VLAN network segmentation, and firmware patch currency.
+  - **Zero-Retention Password Strength Tool**: Evaluates candidate Wi-Fi passphrases in volatile memory with information entropy calculation, pattern penalties, and offline GPU/CPU crack time estimation. Memory is immediately purged upon modal dismissal without persisting or logging passwords.
+  - **Sanitized Export & Scan History**: Privacy-conscious JSON and CSV export formats, persistent SQLite scan history, and spectrum congestion analytics for 2.4 GHz non-standard channel overlap.
+
 - **Security & Activity Audit Logging**
-  - Immutable audit trail recording discovery sessions, authentication attempts, manual additions, and exports.
+  - Immutable audit trail recording discovery sessions, authentication attempts, manual additions, Wi-Fi security assessments, audit checklist saves, and exports.
   - Export audit logs to CSV or clear audit history.
 
 ---

@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using CamScope.App.ViewModels;
 using CamScope.App.Views;
+using CamScope.Application.Security;
 using CamScope.Application.Services;
 using CamScope.CameraProtocols.Onvif;
 using CamScope.Core.Interfaces;
@@ -68,6 +69,7 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IDeviceRepository>(_ => new SqliteDeviceRepository(connectionString));
         services.AddSingleton<IAuditService>(_ => new SqliteAuditService(connectionString));
         services.AddSingleton<ISettingsService>(_ => new SqliteSettingsService(connectionString));
+        services.AddSingleton<IWifiSecurityRepository>(_ => new SqliteWifiSecurityRepository(connectionString));
 
         // Network & Security
         services.AddSingleton<INetworkInterfaceProvider, NetworkInterfaceProvider>();
@@ -76,6 +78,8 @@ public partial class App : Avalonia.Application
         services.AddSingleton<INetworkInventoryService, NetworkInventoryService>();
         services.AddSingleton<ISubnetScanner, SubnetScanner>();
         services.AddSingleton<ICredentialStore, SecureCredentialStore>();
+        services.AddSingleton<IWifiSecurityAnalyzer, WifiSecurityAnalyzer>();
+        services.AddSingleton<IPasswordStrengthEstimator, PasswordStrengthEstimator>();
 
         // Wi-Fi Network Manager
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -94,6 +98,24 @@ public partial class App : Avalonia.Application
         else
         {
             services.AddSingleton<IWifiNetworkManager, UnsupportedPlatformWifiNetworkManager>();
+        }
+
+        // Wi-Fi Security Scanner
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            services.AddSingleton<IWifiSecurityScanner, MacWifiSecurityScanner>();
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            services.AddSingleton<IWifiSecurityScanner, WindowsWifiSecurityScanner>();
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            services.AddSingleton<IWifiSecurityScanner, LinuxWifiSecurityScanner>();
+        }
+        else
+        {
+            services.AddSingleton<IWifiSecurityScanner, UnsupportedWifiSecurityScanner>();
         }
 
         // Discovery Engines
@@ -141,6 +163,7 @@ public partial class App : Avalonia.Application
             () => isDemoModeHolder.IsDemoMode));
 
         services.AddSingleton<NetworkExplorerViewModel>();
+        services.AddSingleton<WifiSecurityViewModel>();
         services.AddSingleton<NetworkInterfacesViewModel>();
         services.AddSingleton<DeviceGroupsViewModel>();
         services.AddSingleton<DiagnosticsViewModel>();
@@ -161,6 +184,7 @@ public partial class App : Avalonia.Application
             sp.GetRequiredService<LiveMonitoringViewModel>(),
             sp.GetRequiredService<RecordingsViewModel>(),
             sp.GetRequiredService<NetworkExplorerViewModel>(),
+            sp.GetRequiredService<WifiSecurityViewModel>(),
             sp.GetRequiredService<DeviceGroupsViewModel>(),
             sp.GetRequiredService<DiagnosticsViewModel>(),
             sp.GetRequiredService<AuditLogViewModel>(),

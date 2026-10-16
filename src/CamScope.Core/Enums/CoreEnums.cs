@@ -76,7 +76,12 @@ public enum AuditAction
     InventoryCleared,
     NetworkInterfaceSelected,
     SubnetScanStarted,
-    SubnetScanCompleted
+    SubnetScanCompleted,
+    WifiSecurityScanStarted,
+    WifiSecurityScanCompleted,
+    WifiSecurityAssessmentRun,
+    WifiAuditRecordSaved,
+    WifiAuditRecordDeleted
 }
 
 public enum ThemeMode
@@ -102,4 +107,52 @@ public enum DiagnosticSeverity
     Info,
     Warning,
     Error
+}
+
+public enum FindingSeverity
+{
+    Critical,
+    High,
+    Medium,
+    Low,
+    Informational
+}
+
+public enum FindingConfidence
+{
+    Confirmed,
+    Inferred,
+    ObservableAdvertisementOnly,
+    UnobservableRouterSideRequired
+}
+
+public enum PmfStatus
+{
+    Mandatory,
+    Capable,
+    Disabled,
+    UnknownNotObservable
+}
+
+public enum SecurityPostureLevel
+{
+    Secure,
+    Satisfactory,
+    NeedsAttention,
+    Vulnerable,
+    CriticalRisk
+}
+
+public enum WifiSecurityStandard
+{
+    Open,
+    Wep,
+    WpaPersonal,
+    WpaEnterprise,
+    Wpa2Personal,
+    Wpa2Enterprise,
+    Wpa3Personal,
+    Wpa3Enterprise,
+    Wpa2Wpa3Transition,
+    Unknown
 }

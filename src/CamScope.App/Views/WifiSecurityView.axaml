@@ -1,0 +1,510 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CamScope.App.ViewModels"
+             xmlns:models="using:CamScope.Core.Models"
+             x:Class="CamScope.App.Views.WifiSecurityView"
+             x:DataType="vm:WifiSecurityViewModel">
+
+  <Grid>
+    <!-- Main Content Scrollable Area -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="16" Margin="0,0,0,24">
+
+        <!-- Page Header & Action Bar -->
+        <Grid ColumnDefinitions="*, Auto">
+          <StackPanel Grid.Column="0">
+            <TextBlock Text="Passive Wi-Fi Vulnerability Assessment" Classes="pageHeader"/>
+            <TextBlock Text="Assess nearby wireless access points, encryption weaknesses, WPS, PMF, and duplicate SSIDs without connecting" Classes="pageSubHeader"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+            <Button Content="Scan Nearby APs"
+                    Command="{Binding StartScanCommand}"
+                    IsEnabled="{Binding !IsScanning}"
+                    Classes="primary"/>
+            <Button Content="Stop Scan"
+                    Command="{Binding StopScanCommand}"
+                    IsVisible="{Binding IsScanning}"
+                    Classes="danger"/>
+            <Button Content="Password Strength Tool"
+                    Command="{Binding OpenPasswordModalCommand}"
+                    Classes="secondary"/>
+            <Button Content="Export JSON"
+                    Command="{Binding ExportJsonCommand}"
+                    Classes="secondary"/>
+            <Button Content="Export CSV"
+                    Command="{Binding ExportCsvCommand}"
+                    Classes="secondary"/>
+          </StackPanel>
+        </Grid>
+
+        <!-- Top Metrics Cards -->
+        <Grid ColumnDefinitions="*, *, *, *">
+          <!-- Metric 1: Overall Posture -->
+          <Border Grid.Column="0" Margin="0,0,6,0" Classes="metricCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="OVERALL SECURITY POSTURE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+              <TextBlock Text="{Binding OverallPostureBadgeText}" FontSize="18" FontWeight="Bold" Foreground="{Binding OverallPostureBadgeColor}"/>
+              <TextBlock Text="{Binding PostureSummaryText}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Metric 2: Discovered Access Points -->
+          <Border Grid.Column="1" Margin="6,0,6,0" Classes="metricCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="DISCOVERED ACCESS POINTS" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+              <TextBlock Text="{Binding TotalAccessPoints}" FontSize="20" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="{Binding LastScanTimeText, StringFormat='{}Last scan: {0}'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Metric 3: Critical & High Findings -->
+          <Border Grid.Column="2" Margin="6,0,6,0" Classes="metricCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="HIGH &amp; CRITICAL VULNERABILITIES" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding CriticalFindingsCount, StringFormat='{}{0} Critical'}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource RedDanger}"/>
+                <TextBlock Text="•" FontSize="14" Foreground="{StaticResource TextMuted}"/>
+                <TextBlock Text="{Binding HighFindingsCount, StringFormat='{}{0} High'}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+              </StackPanel>
+              <TextBlock Text="{Binding MediumFindingsCount, StringFormat='{}{0} Medium severity findings'}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Metric 4: Open & Modern Standards -->
+          <Border Grid.Column="3" Margin="6,0,0,0" Classes="metricCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="ENCRYPTION POSTURE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding TotalOpenNetworks, StringFormat='{}{0} Open'}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource RedDanger}"/>
+                <TextBlock Text="•" FontSize="14" Foreground="{StaticResource TextMuted}"/>
+                <TextBlock Text="{Binding TotalWpa3Networks, StringFormat='{}{0} WPA3'}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+              </StackPanel>
+              <TextBlock Text="Passive beacon analysis" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+            </StackPanel>
+          </Border>
+        </Grid>
+
+        <!-- Defensive Passive Audit Assurance Banner -->
+        <Border Classes="card" Background="#0C1929" BorderBrush="{StaticResource CyanAccent}" BorderThickness="1">
+          <Grid ColumnDefinitions="Auto, *">
+            <Border Grid.Column="0" Classes="badgeCyan" VerticalAlignment="Center" Margin="0,0,12,0">
+              <TextBlock Text="🛡 DEFENSIVE PASSIVE AUDIT" FontSize="11" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+            </Border>
+            <TextBlock Grid.Column="1"
+                       Text="CamScope captures wireless beacon frames passively. No association frames, deauthentication frames, or injection attacks are performed. Weaknesses are identified strictly from advertised 802.11 Information Elements (IEs). Unobservable settings (e.g. WPA2 PMF enforcement, admin credentials) require router-side verification."
+                       FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+          </Grid>
+        </Border>
+
+        <!-- Status / Feedback Bar -->
+        <Grid ColumnDefinitions="*, Auto" Margin="2,0">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding ScanStatusMessage}" FontSize="12" Foreground="{StaticResource CyanAccent}" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding ExportFeedback}" FontSize="12" Foreground="{StaticResource GreenSuccess}" VerticalAlignment="Center"
+                       IsVisible="{Binding ExportFeedback, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+          </StackPanel>
+          <TextBlock Grid.Column="1" Text="{Binding ErrorMessage}" FontSize="12" Foreground="{StaticResource RedDanger}"
+                     IsVisible="{Binding HasError}"/>
+        </Grid>
+
+        <!-- Filter & Search Toolbar -->
+        <Border Classes="card" Padding="12">
+          <Grid ColumnDefinitions="*, Auto, Auto, Auto">
+            <TextBox Grid.Column="0" Text="{Binding SearchQuery}"
+                     Watermark="Search access points by SSID, BSSID, or Security..."
+                     Margin="0,0,12,0"/>
+
+            <!-- Severity Filter -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,12,0" VerticalAlignment="Center">
+              <TextBlock Text="Severity:" FontSize="12" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+              <ComboBox ItemsSource="{Binding SeverityFilterOptions}" SelectedItem="{Binding SelectedSeverityFilter}" Width="130"/>
+            </StackPanel>
+
+            <!-- Band Filter -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="0,0,12,0" VerticalAlignment="Center">
+              <TextBlock Text="Band:" FontSize="12" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+              <ComboBox ItemsSource="{Binding BandFilterOptions}" SelectedItem="{Binding SelectedBandFilter}" Width="110"/>
+            </StackPanel>
+
+            <!-- Sort By -->
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <TextBlock Text="Sort:" FontSize="12" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+              <ComboBox ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSortOption}" Width="150"/>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <!-- Main Workspace (Grid: Access Points DataGrid on Left, Detail Drawer on Right) -->
+        <Grid ColumnDefinitions="*, Auto">
+
+          <!-- Left: Tabbed Views (Access Points, Duplicates, Congestion, History) -->
+          <TabControl Grid.Column="0" Margin="0,0,12,0">
+
+            <!-- TAB 1: Discovered Access Points -->
+            <TabItem Header="Discovered Access Points">
+              <Border Classes="card" Padding="0" Margin="0,10,0,0">
+                <DataGrid ItemsSource="{Binding FilteredAccessPoints}"
+                          SelectedItem="{Binding SelectedAccessPoint}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          GridLinesVisibility="Horizontal"
+                          CanUserSortColumns="True"
+                          Background="Transparent"
+                          MinHeight="360">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="Signal" Binding="{Binding SignalText}" Width="1.2*"/>
+                    <DataGridTextColumn Header="SSID" Binding="{Binding DisplaySsid}" Width="2*"/>
+                    <DataGridTextColumn Header="BSSID (MAC)" Binding="{Binding DisplayBssid}" Width="1.8*"/>
+                    <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="0.8*"/>
+                    <DataGridTextColumn Header="Band" Binding="{Binding BandGroup}" Width="1*"/>
+                    <DataGridTextColumn Header="PHY Mode" Binding="{Binding PhyMode}" Width="1.1*"/>
+                    <DataGridTextColumn Header="Security Standard" Binding="{Binding SecurityStandard}" Width="1.6*"/>
+                    <DataGridTemplateColumn Header="WPS" Width="0.9*">
+                      <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="models:WifiAccessPointObservation">
+                          <TextBlock Text="{Binding SupportsWps, StringFormat='{}{0}'}"
+                                     Foreground="{StaticResource TextPrimary}"
+                                     VerticalAlignment="Center" Margin="8,0"/>
+                        </DataTemplate>
+                      </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Actions" Width="2*">
+                      <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="models:WifiAccessPointObservation" x:CompileBindings="False">
+                          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="4,0">
+                            <Button Content="Inspect"
+                                    Command="{Binding $parent[UserControl].DataContext.OpenDetailDrawerCommand}"
+                                    CommandParameter="{Binding}"
+                                    Classes="secondary" Padding="8,3" FontSize="11"/>
+                            <Button Content="Defensive Audit"
+                                    Command="{Binding $parent[UserControl].DataContext.OpenAuditModalCommand}"
+                                    CommandParameter="{Binding}"
+                                    Classes="primary" Padding="8,3" FontSize="11"/>
+                          </StackPanel>
+                        </DataTemplate>
+                      </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                  </DataGrid.Columns>
+                </DataGrid>
+              </Border>
+            </TabItem>
+
+            <!-- TAB 2: Duplicate SSID & Rogue Analysis -->
+            <TabItem Header="Duplicate SSID Analysis">
+              <Border Classes="card" Margin="0,10,0,0">
+                <StackPanel Spacing="12">
+                  <TextBlock Text="Duplicate SSID &amp; Multi-AP Roaming Analysis" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                  <TextBlock Text="Multiple access points advertising the same SSID can represent legitimate Wi-Fi mesh systems, dual-band APs, or potential rogue access point risks (evil twin indicators)."
+                             FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+                  <ItemsControl ItemsSource="{Binding DuplicateSsidAnalyses}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="models:DuplicateSsidAnalysis">
+                        <Border Classes="card" Margin="0,0,0,8" Background="#141E2E" Padding="12">
+                          <Grid RowDefinitions="Auto, Auto, Auto" ColumnDefinitions="*, Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Ssid}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                            <Border Grid.Row="0" Grid.Column="1"
+                                    Classes="badgeDanger" IsVisible="{Binding HasSecurityMismatch}">
+                              <TextBlock Text="SECURITY MISMATCH / ROGUE RISK" FontSize="10" FontWeight="Bold" Foreground="{StaticResource RedDanger}"/>
+                            </Border>
+                            <Border Grid.Row="0" Grid.Column="1"
+                                    Classes="badgeSuccess" IsVisible="{Binding !HasSecurityMismatch}">
+                              <TextBlock Text="LEGITIMATE MESH / ROAMING" FontSize="10" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                            </Border>
+
+                            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Description}" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,6,0,4"/>
+                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding AccessPointsCount, StringFormat='{}Observed AP Count: {0}'}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </TabItem>
+
+            <!-- TAB 3: Channel Congestion & Spectrum -->
+            <TabItem Header="Channel Congestion">
+              <Border Classes="card" Margin="0,10,0,0">
+                <StackPanel Spacing="12">
+                  <TextBlock Text="Channel Utilization &amp; Non-Standard Overlap" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                  <TextBlock Text="In the 2.4 GHz band, channels other than 1, 6, and 11 suffer from severe adjacent-channel interference. Use standard non-overlapping channels."
+                             FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+                  <DataGrid ItemsSource="{Binding CongestionMetrics}"
+                            AutoGenerateColumns="False"
+                            IsReadOnly="True"
+                            GridLinesVisibility="Horizontal"
+                            Background="Transparent">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="1*"/>
+                      <DataGridTextColumn Header="Band" Binding="{Binding Band}" Width="1.5*"/>
+                      <DataGridTextColumn Header="Observed APs" Binding="{Binding AccessPointCount}" Width="1.5*"/>
+                      <DataGridCheckBoxColumn Header="Non-Standard Overlap Warning" Binding="{Binding IsNonStandard24Ghz}" Width="2*"/>
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+            </TabItem>
+
+            <!-- TAB 4: Scan History -->
+            <TabItem Header="Scan History">
+              <Border Classes="card" Margin="0,10,0,0">
+                <StackPanel Spacing="12">
+                  <Grid ColumnDefinitions="*, Auto">
+                    <TextBlock Grid.Column="0" Text="Recorded Scan Sessions" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Clear Scan History" Command="{Binding ClearHistoryCommand}" Classes="danger" Padding="10,4" FontSize="11"/>
+                  </Grid>
+
+                  <DataGrid ItemsSource="{Binding ScanHistory}"
+                            AutoGenerateColumns="False"
+                            IsReadOnly="True"
+                            GridLinesVisibility="Horizontal"
+                            Background="Transparent">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Session Timestamp (UTC)" Binding="{Binding ScannedAtUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" Width="2*"/>
+                      <DataGridTextColumn Header="Networks Discovered" Binding="{Binding TotalNetworksFound}" Width="1.5*"/>
+                      <DataGridTextColumn Header="Security Posture" Binding="{Binding OverallPosture}" Width="2*"/>
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </StackPanel>
+              </Border>
+            </TabItem>
+
+          </TabControl>
+
+          <!-- Right: Slide-Out Detail Drawer (Visible when IsDetailDrawerOpen is true) -->
+          <Border Grid.Column="1" Width="380" Classes="card"
+                  Background="#111827" BorderBrush="{StaticResource CyanAccent}" BorderThickness="1"
+                  IsVisible="{Binding IsDetailDrawerOpen}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="14">
+
+                <!-- Drawer Header -->
+                <Grid ColumnDefinitions="*, Auto">
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Text="Access Point Details" FontSize="14" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                    <TextBlock Text="{Binding SelectedAccessPoint.DisplaySsid}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+                  <Button Grid.Column="1" Content="✕" Command="{Binding CloseDetailDrawerCommand}" Classes="secondary" Padding="8,4" FontSize="12"/>
+                </Grid>
+
+                <!-- AP Telemetry Specs Card -->
+                <Border Classes="card" Background="#162032" Padding="10">
+                  <Grid RowDefinitions="Auto, Auto, Auto, Auto, Auto" ColumnDefinitions="Auto, *">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="BSSID:" FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,2,8,2"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedAccessPoint.DisplayBssid}" FontSize="11" Foreground="{StaticResource TextPrimary}" Margin="0,2,0,2"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Signal:" FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,2,8,2"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedAccessPoint.SignalText}" FontSize="11" Foreground="{StaticResource TextPrimary}" Margin="0,2,0,2"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Channel / Band:" FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,2,8,2"/>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="0,2,0,2">
+                      <TextBlock Text="{Binding SelectedAccessPoint.Channel, StringFormat='{}Ch {0}'}" FontSize="11" Foreground="{StaticResource TextPrimary}"/>
+                      <TextBlock Text="{Binding SelectedAccessPoint.BandGroup, StringFormat='{}({0})'}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="PHY Mode:" FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,2,8,2"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedAccessPoint.PhyMode}" FontSize="11" Foreground="{StaticResource TextPrimary}" Margin="0,2,0,2"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="PMF Status:" FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,2,8,2"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedAccessPoint.PmfCapability}" FontSize="11" Foreground="{StaticResource CyanAccent}" Margin="0,2,0,2"/>
+                  </Grid>
+                </Border>
+
+                <!-- Findings Header -->
+                <TextBlock Text="Passive Security Findings" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+
+                <!-- Findings Items Control -->
+                <ItemsControl ItemsSource="{Binding SelectedApFindings}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="models:SecurityFinding">
+                      <Border Classes="card" Margin="0,0,0,10" Background="#1A2234" Padding="12">
+                        <StackPanel Spacing="6">
+                          <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                            <Border Grid.Column="1" Background="{Binding SeverityBadgeColor}" CornerRadius="4" Padding="6,2">
+                              <TextBlock Text="{Binding Severity}" FontSize="9" FontWeight="Bold" Foreground="White"/>
+                            </Border>
+                          </Grid>
+
+                          <Border Classes="badgeWarning" IsVisible="{Binding RequiresRouterSideVerification}">
+                            <TextBlock Text="⚠ Requires Router Verification" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+                          </Border>
+
+                          <TextBlock Text="Evidence Observed:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                          <TextBlock Text="{Binding EvidenceObserved}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+
+                          <TextBlock Text="Security Impact:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                          <TextBlock Text="{Binding ImpactExplanation}" FontSize="11" Foreground="{StaticResource RedDanger}" TextWrapping="Wrap"/>
+
+                          <TextBlock Text="Remediation:" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                          <TextBlock Text="{Binding RecommendedRemediation}" FontSize="11" Foreground="{StaticResource GreenSuccess}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Start Defensive Audit Button -->
+                <Button Content="Open Defensive Audit Checklist"
+                        Command="{Binding OpenAuditModalCommand}"
+                        CommandParameter="{Binding SelectedAccessPoint}"
+                        Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+
+              </StackPanel>
+            </ScrollViewer>
+          </Border>
+
+        </Grid>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- MODAL 1: Authorized Audit Checklist Modal -->
+    <Border Background="#D0000000" IsVisible="{Binding IsAuditModalOpen}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+      <Border Classes="card" Background="#111827" Width="680" MaxHeight="650"
+              BorderBrush="{StaticResource CyanAccent}" BorderThickness="1"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20">
+        <Grid RowDefinitions="Auto, *, Auto">
+
+          <!-- Modal Header -->
+          <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,14">
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Defensive Router Verification &amp; Audit Checklist" FontSize="16" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="{Binding AuditTargetSsid, StringFormat='{}Target Network: {0}'}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="✕" Command="{Binding CloseAuditModalCommand}" Classes="secondary" Padding="8,4"/>
+          </Grid>
+
+          <!-- Modal Body -->
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+
+              <!-- Authorization Notice CheckBox -->
+              <Border Classes="card" Background="#1E1408" BorderBrush="{StaticResource AmberWarning}" BorderThickness="1" Padding="12">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="OPERATOR AUTHORIZATION REQUIRED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+                  <TextBlock Text="Defensive auditing of wireless equipment must only be conducted on networks that you own or have explicit authorization to assess."
+                             FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                  <CheckBox Content="I confirm that I own or am authorized to audit this wireless router / network."
+                            IsChecked="{Binding IsOwnershipConfirmed}" Foreground="{StaticResource TextPrimary}" Margin="0,6,0,0"/>
+                </StackPanel>
+              </Border>
+
+              <!-- Checklist Items -->
+              <TextBlock Text="Router Firmware &amp; Wireless Security Checklist" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+
+              <ItemsControl ItemsSource="{Binding AuditChecklistItems}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="models:AuditChecklistItem">
+                    <Border Classes="card" Margin="0,0,0,8" Background="#162032" Padding="10">
+                      <Grid ColumnDefinitions="Auto, *">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding IsVerified}" VerticalAlignment="Top" Margin="0,0,10,0"/>
+                        <StackPanel Grid.Column="1" Spacing="4">
+                          <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                          <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                          <TextBlock Text="{Binding VerificationGuide, StringFormat='{}Verification Guide: {0}'}" FontSize="10" Foreground="{StaticResource CyanAccent}"/>
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <!-- Router Configuration Verified -->
+              <CheckBox Content="I have inspected the router web administration console and verified the settings above."
+                        IsChecked="{Binding IsRouterVerified}" Foreground="{StaticResource TextPrimary}"/>
+
+              <!-- Operator Notes -->
+              <StackPanel Spacing="4">
+                <TextBlock Text="Operator Audit Notes / Evidence:" FontSize="12" Foreground="{StaticResource TextMuted}"/>
+                <TextBox Text="{Binding AuditNotes}" Watermark="Enter inspection notes, router firmware version, or verification details..." Height="60" AcceptsReturn="True"/>
+              </StackPanel>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- Modal Footer -->
+          <Grid Grid.Row="2" ColumnDefinitions="*, Auto, Auto" Margin="0,14,0,0">
+            <Button Grid.Column="1" Content="Cancel" Command="{Binding CloseAuditModalCommand}" Classes="secondary" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Content="Save Audit Record" Command="{Binding SaveAuditRecordCommand}" Classes="primary" IsEnabled="{Binding IsOwnershipConfirmed}"/>
+          </Grid>
+
+        </Grid>
+      </Border>
+    </Border>
+
+    <!-- MODAL 2: Local Password Strength Tool Modal (Zero Retention Guarantee) -->
+    <Border Background="#D0000000" IsVisible="{Binding IsPasswordModalOpen}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+      <Border Classes="card" Background="#111827" Width="600" MaxHeight="600"
+              BorderBrush="{StaticResource CyanAccent}" BorderThickness="1"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20">
+        <Grid RowDefinitions="Auto, *, Auto">
+
+          <!-- Header -->
+          <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,14">
+            <StackPanel Grid.Column="0">
+              <TextBlock Text="Local Password Strength &amp; Offline Crack Time Estimator" FontSize="15" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="Zero-Retention Guarantee: Passphrases evaluated in memory only. Never logged or saved." FontSize="11" Foreground="{StaticResource TextMuted}"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="✕" Command="{Binding ClosePasswordModalCommand}" Classes="secondary" Padding="8,4"/>
+          </Grid>
+
+          <!-- Body -->
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+
+              <!-- Input Box -->
+              <StackPanel Spacing="4">
+                <TextBlock Text="Candidate Wi-Fi Passphrase:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                <TextBox Text="{Binding CandidatePasswordInput}" Watermark="Type candidate Wi-Fi passphrase to evaluate strength..."
+                         PasswordChar="•"/>
+              </StackPanel>
+
+              <!-- Estimation Results Card -->
+              <Border Classes="card" Background="#162032" Padding="14">
+                <Grid RowDefinitions="Auto, Auto, Auto, Auto" ColumnDefinitions="*, Auto">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="STRENGTH RATING" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                  <Border Grid.Row="0" Grid.Column="1" Background="{Binding PasswordEstimate.BadgeColor}" CornerRadius="4" Padding="8,2">
+                    <TextBlock Text="{Binding PasswordEstimate.Rating}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                  </Border>
+
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Information Entropy:" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,10,0,2"/>
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PasswordEstimate.EntropyBits, StringFormat='{}{0:F1} bits'}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource CyanAccent}" Margin="0,10,0,2"/>
+
+                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Offline GPU Crack Time (100M H/s):" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,2"/>
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PasswordEstimate.EstimatedCrackTimeOfflineGpu}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,4,0,2"/>
+
+                  <TextBlock Grid.Row="3" Grid.Column="0" Text="Offline CPU Crack Time (100k H/s):" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,2"/>
+                  <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PasswordEstimate.EstimatedCrackTimeOfflineCpu}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,4,0,2"/>
+                </Grid>
+              </Border>
+
+              <!-- Actionable Recommendations -->
+              <TextBlock Text="Security Hardening Suggestions" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+
+              <ItemsControl ItemsSource="{Binding PasswordEstimate.Suggestions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Classes="card" Margin="0,0,0,4" Background="#1B2436" Padding="8">
+                      <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- Footer -->
+          <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Button Content="Close Tool" Command="{Binding ClosePasswordModalCommand}" Classes="secondary" HorizontalAlignment="Right"/>
+          </Grid>
+
+        </Grid>
+      </Border>
+    </Border>
+
+  </Grid>
+</UserControl>

@@ -116,6 +116,9 @@
               <TextBlock Text="Network Explorer" FontSize="13"/>
             </ListBoxItem>
             <ListBoxItem Classes="navItem">
+              <TextBlock Text="Wi-Fi Security" FontSize="13"/>
+            </ListBoxItem>
+            <ListBoxItem Classes="navItem">
               <TextBlock Text="Device Groups" FontSize="13"/>
             </ListBoxItem>
             <ListBoxItem Classes="navItem">
@@ -161,6 +164,9 @@
             </DataTemplate>
             <DataTemplate DataType="{x:Type vm:NetworkExplorerViewModel}">
               <views:NetworkExplorerView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:WifiSecurityViewModel}">
+              <views:WifiSecurityView />
             </DataTemplate>
             <DataTemplate DataType="{x:Type vm:DeviceGroupsViewModel}">
               <views:DeviceGroupsView />

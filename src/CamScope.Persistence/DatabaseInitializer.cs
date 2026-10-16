@@ -86,6 +86,26 @@ CREATE TABLE IF NOT EXISTS Settings (
     Key TEXT PRIMARY KEY,
     ValueJson TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS WifiScanSessions (
+    Id TEXT PRIMARY KEY,
+    ScannedAtUtc TEXT NOT NULL,
+    TotalNetworksFound INTEGER NOT NULL,
+    OverallPosture TEXT NOT NULL,
+    ObservationsJson TEXT NOT NULL,
+    FindingsSummaryJson TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS WifiAuditRecords (
+    Id TEXT PRIMARY KEY,
+    Ssid TEXT NOT NULL,
+    Bssid TEXT,
+    AuditedAtUtc TEXT NOT NULL,
+    OwnershipConfirmed INTEGER NOT NULL,
+    ChecklistJson TEXT NOT NULL,
+    Notes TEXT,
+    RouterVerified INTEGER NOT NULL DEFAULT 0
+);
 ";
         cmd.ExecuteNonQuery();
     }
