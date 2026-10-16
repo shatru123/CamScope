@@ -132,6 +132,19 @@ public sealed class WifiConnectionInfo
     public DateTime ConnectedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
+public enum WifiConnectionState
+{
+    DiscoveringNetworks,
+    AwaitingCredentials,
+    Connecting,
+    Connected,
+    AuthenticationFailed,
+    PermissionDenied,
+    NetworkUnavailable,
+    TimedOut,
+    Cancelled
+}
+
 public sealed class WifiConnectRequest
 {
     public string Ssid { get; set; } = string.Empty;
@@ -144,7 +157,12 @@ public sealed class WifiConnectRequest
 public sealed class WifiConnectionResult
 {
     public bool Succeeded { get; set; }
+    public WifiConnectionState State { get; set; } = WifiConnectionState.AwaitingCredentials;
     public string Message { get; set; } = string.Empty;
+    public string? ErrorClassification { get; set; }
+    public bool CanRetry { get; set; }
+    public bool IsUnsupportedAuthMode { get; set; }
+    public string? SuggestedAlternative { get; set; }
     public string? ConnectedInterface { get; set; }
     public string? AssignedIp { get; set; }
     public bool PreservedPrimaryConnection { get; set; }

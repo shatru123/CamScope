@@ -858,5 +858,245 @@ public class NetworkExplorerViewModelTests
         Assert.Empty(vm.WifiPasswordInput);
         Assert.Null(vm.PasswordValidationError);
         Assert.Null(vm.ConnectErrorMessage);
+        Assert.Equal(WifiConnectionState.AwaitingCredentials, vm.ConnectionState);
+    }
+
+    [Fact]
+    public async Task WifiModal_AuthFailed_AllowsPasswordEditAndSuccessfulRetry()
+    {
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var wifiManager = new FakeWifiNetworkManager
+        {
+            ConnectResult = new WifiConnectionResult
+            {
+                Succeeded = false,
+                State = WifiConnectionState.AuthenticationFailed,
+                Message = "Authentication failed. Check the password and try again.",
+                ErrorClassification = "OS CoreWLAN Authentication Failure (-3905)",
+                CanRetry = true,
+                ConnectedInterface = "en0"
+            }
+        };
+
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            selectionService,
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            wifiManager,
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var targetWifi = new WifiNetworkInfo { Ssid = "CCTV_WLAN", Security = "WPA2" };
+        await vm.OpenConnectModalAsync(targetWifi);
+
+        vm.RequiresSingleAdapterWarning = false;
+        vm.WifiPasswordInput = "WrongPass123";
+
+        // First attempt: Fails with AuthenticationFailed
+        await vm.ConnectWifiAsync();
+
+        Assert.False(vm.ConnectSuccess);
+        Assert.Equal(WifiConnectionState.AuthenticationFailed, vm.ConnectionState);
+        Assert.True(vm.IsAuthFailed);
+        Assert.True(vm.CanRetry);
+        Assert.Contains("Authentication failed", vm.ConnectErrorMessage);
+        // Password retained in field so operator can edit typo
+        Assert.Equal("WrongPass123", vm.WifiPasswordInput);
+
+        // Operator corrects password and retries
+        vm.WifiPasswordInput = "CorrectPass123!";
+        wifiManager.ConnectResult = new WifiConnectionResult
+        {
+            Succeeded = true,
+            State = WifiConnectionState.Connected,
+            ConnectedInterface = "en0",
+            AssignedIp = "192.168.1.50",
+            PreservedPrimaryConnection = true,
+            Message = "Connected"
+        };
+
+        await vm.RetryConnectWifi();
+
+        Assert.True(vm.ConnectSuccess);
+        Assert.Equal(WifiConnectionState.Connected, vm.ConnectionState);
+        Assert.False(vm.IsAuthFailed);
+        // Password memory wiped immediately upon success
+        Assert.Empty(vm.WifiPasswordInput);
+    }
+
+    [Fact]
+    public async Task WifiModal_CancelConnect_TransitionsStateToCancelled()
+    {
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            selectionService,
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var targetWifi = new WifiNetworkInfo { Ssid = "CCTV_WLAN", Security = "WPA2" };
+        await vm.OpenConnectModalAsync(targetWifi);
+
+        // Simulate in-flight connecting state
+        vm.IsConnectingWifi = true;
+        vm.ConnectionState = WifiConnectionState.Connecting;
+
+        // Operator invokes cancel
+        vm.CancelConnectWifiCommand.Execute(null);
+
+        Assert.False(vm.IsConnectingWifi);
+        Assert.Equal(WifiConnectionState.Cancelled, vm.ConnectionState);
+        Assert.True(vm.CanRetry);
+        Assert.Contains("cancelled", vm.ConnectErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WifiModal_DetectsEnterprise8021X_PromptsSettingsRedirect()
+    {
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var enterpriseWifi = new WifiNetworkInfo
+        {
+            Ssid = "Campus_Enterprise",
+            Security = "WPA2 Enterprise (802.1X)"
+        };
+
+        await vm.OpenConnectModalAsync(enterpriseWifi);
+
+        Assert.True(vm.IsUnsupportedAuthMode);
+        Assert.Equal(WifiConnectionState.AuthenticationFailed, vm.ConnectionState);
+        Assert.NotNull(vm.SuggestedAlternative);
+        Assert.Contains("System Settings", vm.SuggestedAlternative);
+    }
+
+    [Fact]
+    public async Task WifiModal_AuthorizedAlternatives_SwitchesToWiredEthernet()
+    {
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var inventoryService = new FakeNetworkInventoryService();
+        var wiredIface = inventoryService.Report.Interfaces.First(i => i.Name == "en3");
+
+        var vm = new NetworkExplorerViewModel(
+            inventoryService,
+            selectionService,
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            new FakeWifiNetworkManager(),
+            NullLogger<NetworkExplorerViewModel>.Instance);
+
+        var wifi = new WifiNetworkInfo { Ssid = "Locked_AP", Security = "WPA3" };
+        await vm.OpenConnectModalAsync(wifi);
+
+        // Verify wired interface is available in alternatives
+        Assert.Contains(vm.AvailableWiredInterfaces, i => i.Name == "en3");
+
+        // Toggle alternatives accordion
+        Assert.False(vm.ShowAuthorizedAlternatives);
+        vm.ToggleAuthorizedAlternativesCommand.Execute(null);
+        Assert.True(vm.ShowAuthorizedAlternatives);
+
+        // Select wired alternative directly without needing Wi-Fi password
+        vm.SelectWiredAlternativeCommand.Execute(wiredIface);
+
+        Assert.False(vm.IsConnectModalOpen);
+        Assert.NotNull(selectionService.CctvInterface);
+        Assert.Equal("en3", selectionService.CctvInterface.Name);
+    }
+
+    [Fact]
+    public async Task WifiModal_KeychainOptIn_SavesAndLoadsCredentials()
+    {
+        var credStore = new FakeCredentialStore();
+        var selectionService = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var wifiManager = new FakeWifiNetworkManager
+        {
+            ConnectResult = new WifiConnectionResult
+            {
+                Succeeded = true,
+                State = WifiConnectionState.Connected,
+                ConnectedInterface = "en0",
+                AssignedIp = "192.168.1.10",
+                PreservedPrimaryConnection = true,
+                Message = "Connected"
+            }
+        };
+
+        var vm = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            selectionService,
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            wifiManager,
+            NullLogger<NetworkExplorerViewModel>.Instance,
+            credStore);
+
+        var targetWifi = new WifiNetworkInfo { Ssid = "Saved_AP", Security = "WPA2" };
+        await vm.OpenConnectModalAsync(targetWifi);
+
+        vm.RequiresSingleAdapterWarning = false;
+        vm.WifiPasswordInput = "SuperSecretPSK99";
+        vm.RememberCredentialsInStore = true; // Opt in
+
+        await vm.ConnectWifiAsync();
+
+        Assert.True(vm.ConnectSuccess);
+        // Verify saved in store
+        var saved = await credStore.GetCredentialsAsync("wifi:Saved_AP");
+        Assert.NotNull(saved);
+        Assert.Equal("SuperSecretPSK99", saved.Value.Password);
+
+        // Next time opening modal for Saved_AP: password should auto-populate and checkbox be checked
+        var vm2 = new NetworkExplorerViewModel(
+            new FakeNetworkInventoryService(),
+            selectionService,
+            new FakeSubnetScanner(),
+            new FakeDeviceRepository(),
+            new FakeAuditService(),
+            wifiManager,
+            NullLogger<NetworkExplorerViewModel>.Instance,
+            credStore);
+
+        await vm2.OpenConnectModalAsync(targetWifi);
+        Assert.Equal("SuperSecretPSK99", vm2.WifiPasswordInput);
+        Assert.True(vm2.RememberCredentialsInStore);
+    }
+
+    private sealed class FakeCredentialStore : ICredentialStore
+    {
+        public Dictionary<string, (string Username, string Password)> Credentials { get; } = new();
+
+        public Task SaveCredentialsAsync(string endpointId, string username, string password, CancellationToken ct = default)
+        {
+            Credentials[endpointId] = (username, password);
+            return Task.CompletedTask;
+        }
+
+        public Task<(string? Username, string? Password)?> GetCredentialsAsync(string endpointId, CancellationToken ct = default)
+        {
+            if (Credentials.TryGetValue(endpointId, out var val))
+            {
+                return Task.FromResult<(string? Username, string? Password)?>(val);
+            }
+            return Task.FromResult<(string? Username, string? Password)?>(null);
+        }
+
+        public Task DeleteCredentialsAsync(string endpointId, CancellationToken ct = default)
+        {
+            Credentials.Remove(endpointId);
+            return Task.CompletedTask;
+        }
     }
 }

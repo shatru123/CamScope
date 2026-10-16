@@ -15,6 +15,7 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
     private readonly INetworkSelectionService _selectionService;
     private readonly IAuditService _auditService;
     private readonly ILogger<MacWifiNetworkManager> _logger;
+    private readonly ICredentialStore? _credentialStore;
     private readonly TimeSpan _processTimeout = TimeSpan.FromSeconds(25);
 
     public bool IsPlatformSupported => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
@@ -44,12 +45,104 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
         INetworkInventoryService inventoryService,
         INetworkSelectionService selectionService,
         IAuditService auditService,
-        ILogger<MacWifiNetworkManager> logger)
+        ILogger<MacWifiNetworkManager> logger,
+        ICredentialStore? credentialStore = null)
     {
         _inventoryService = inventoryService;
         _selectionService = selectionService;
         _auditService = auditService;
         _logger = logger;
+        _credentialStore = credentialStore;
+    }
+
+    public static (WifiConnectionState State, string CleanMessage, string? ErrorClassification, bool CanRetry, bool IsUnsupportedAuthMode, string? SuggestedAlternative) ClassifyNetworksetupError(string combinedOutput, int exitCode)
+    {
+        string text = combinedOutput?.Trim() ?? string.Empty;
+
+        // 1. Enterprise / 802.1X
+        if (text.Contains("802.1X", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("802.1x", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Enterprise", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("EAP", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("(-3915)", StringComparison.OrdinalIgnoreCase))
+        {
+            return (
+                WifiConnectionState.AuthenticationFailed,
+                "This network uses 802.1X Enterprise authentication, which requires an operating system profile or certificate. Use macOS System Settings to connect.",
+                "Unsupported 802.1X Enterprise Authentication Mode (-3915)",
+                false,
+                true,
+                "Enterprise networks require profile/certificate installation. Connect through macOS System Settings > Wi-Fi."
+            );
+        }
+
+        // 2. Authentication Failure / Password Incorrect (CoreWLAN -3905, -3906, -3907, -3924, -3925)
+        if (text.Contains("-3905", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("-3906", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("-3907", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("-3924", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("-3925", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Failed to join network", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("incorrect password", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Password incorrect", StringComparison.OrdinalIgnoreCase))
+        {
+            return (
+                WifiConnectionState.AuthenticationFailed,
+                "Authentication failed. Check the password and try again.",
+                "OS CoreWLAN Authentication Failure (-3905 / Password Incorrect or 4-way Handshake Mismatch)",
+                true,
+                false,
+                "Check the WPA2/WPA3 password. If the password is unknown, consider switching to an authorized wired Ethernet interface or consulting the network administrator."
+            );
+        }
+
+        // 3. Network Unavailable / Out of Range (CoreWLAN -3900, -3901, -3902)
+        if (text.Contains("-3900", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("-3901", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("-3902", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Could not find network", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("No network with that name", StringComparison.OrdinalIgnoreCase))
+        {
+            return (
+                WifiConnectionState.NetworkUnavailable,
+                "Could not find the specified Wi-Fi network. The access point may be out of range, hidden, or offline.",
+                "OS CoreWLAN Network Unavailable (-3900 / SSID Not Found)",
+                true,
+                false,
+                "Verify the router is powered on, broadcasting its SSID, and within physical range."
+            );
+        }
+
+        // 4. Permission Denied / Admin Required (CoreWLAN -3903)
+        if (text.Contains("-3903", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("You must be an administrator", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Operation not permitted", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
+        {
+            return (
+                WifiConnectionState.PermissionDenied,
+                "Permission denied. Administrator privileges or system authorization required to join this Wi-Fi network.",
+                "OS Permission Denied (-3903 / Administrative Privilege Required)",
+                false,
+                false,
+                "Ensure CamScope has necessary permissions or grant network access in System Settings > Privacy & Security."
+            );
+        }
+
+        // 5. General / Unclassified error
+        string fallbackMsg = string.IsNullOrWhiteSpace(text)
+            ? $"Failed to associate with network (Exit code {exitCode})."
+            : text;
+
+        return (
+            WifiConnectionState.AuthenticationFailed,
+            fallbackMsg,
+            $"OS Network Error (Code {exitCode})",
+            true,
+            false,
+            null
+        );
     }
 
     public async Task<IReadOnlyList<NetworkInterfaceInfo>> GetWifiInterfacesAsync(CancellationToken ct = default)
@@ -159,6 +252,7 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             return new WifiConnectionResult
             {
                 Succeeded = false,
+                State = WifiConnectionState.PermissionDenied,
                 Message = "Wi-Fi management is not supported on this operating system."
             };
         }
@@ -168,6 +262,8 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             return new WifiConnectionResult
             {
                 Succeeded = false,
+                State = WifiConnectionState.AwaitingCredentials,
+                CanRetry = true,
                 Message = "SSID name cannot be empty."
             };
         }
@@ -182,6 +278,8 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             return new WifiConnectionResult
             {
                 Succeeded = false,
+                State = WifiConnectionState.NetworkUnavailable,
+                CanRetry = false,
                 Message = $"No compatible Wi-Fi interface found matching '{request.InterfaceName ?? "default"}'. Verify Wi-Fi adapter is connected."
             };
         }
@@ -193,8 +291,10 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             return new WifiConnectionResult
             {
                 Succeeded = false,
+                State = WifiConnectionState.AwaitingCredentials,
                 ConnectedInterface = targetInterface.Name,
                 PreservedPrimaryConnection = true,
+                CanRetry = true,
                 Message = $"Your Mac only has one active physical network adapter ({targetInterface.Name}). Connecting to \"{request.Ssid}\" will switch your primary internet connection. Attach a secondary USB-C Ethernet or Wi-Fi adapter for an isolated connection, or confirm switching."
             };
         }
@@ -210,6 +310,25 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             _logger.LogWarning(ex, "Could not capture pre-connection routing snapshot");
         }
 
+        // Check if saved credentials exist in Keychain if password was not provided
+        string? effectivePassword = request.Password;
+        if (string.IsNullOrEmpty(effectivePassword) && _credentialStore != null)
+        {
+            try
+            {
+                var savedCreds = await _credentialStore.GetCredentialsAsync($"wifi:{request.Ssid}", ct).ConfigureAwait(false);
+                if (savedCreds.HasValue && !string.IsNullOrEmpty(savedCreds.Value.Password))
+                {
+                    effectivePassword = savedCreds.Value.Password;
+                    _logger.LogInformation("Retrieved saved Keychain credentials for SSID {Ssid}", request.Ssid);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Keychain lookup skipped for {Ssid}", request.Ssid);
+            }
+        }
+
         // Redacted logging: NEVER log passwords
         _logger.LogInformation("Initiating Wi-Fi connection on interface {Interface} to SSID {Ssid}",
             targetInterface.Name, request.Ssid);
@@ -222,6 +341,7 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             ct: ct).ConfigureAwait(false);
 
         // Execute networksetup -setairportnetwork <device> <SSID> [password]
+        Process? process = null;
         try
         {
             var psi = new ProcessStartInfo
@@ -237,12 +357,12 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             psi.ArgumentList.Add(targetInterface.Name);
             psi.ArgumentList.Add(request.Ssid);
 
-            if (!string.IsNullOrEmpty(request.Password))
+            if (!string.IsNullOrEmpty(effectivePassword))
             {
-                psi.ArgumentList.Add(request.Password);
+                psi.ArgumentList.Add(effectivePassword);
             }
 
-            using var process = new Process { StartInfo = psi };
+            process = new Process { StartInfo = psi };
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(_processTimeout);
 
@@ -250,7 +370,22 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             var outputTask = process.StandardOutput.ReadToEndAsync(cts.Token);
             var errorTask = process.StandardError.ReadToEndAsync(cts.Token);
 
-            await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            try
+            {
+                await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch { /* ignore */ }
+                throw;
+            }
 
             var stdout = await outputTask.ConfigureAwait(false);
             var stderr = await errorTask.ConfigureAwait(false);
@@ -262,24 +397,34 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
                 combinedOutput.Contains("Failed to join", StringComparison.OrdinalIgnoreCase) ||
                 combinedOutput.Contains("Error:", StringComparison.OrdinalIgnoreCase))
             {
-                string cleanError = string.IsNullOrWhiteSpace(combinedOutput)
-                    ? $"Failed to associate with \"{request.Ssid}\" (Exit code {process.ExitCode})."
-                    : combinedOutput;
+                var (state, cleanMessage, errorClassification, canRetry, isUnsupported, alt) =
+                    ClassifyNetworksetupError(combinedOutput, process.ExitCode);
 
-                _logger.LogWarning("Wi-Fi association failed on {Interface}: {Error}", targetInterface.Name, cleanError);
+                _logger.LogWarning("Wi-Fi association failed on {Interface}: {Error} (Class: {Class})",
+                    targetInterface.Name, cleanMessage, errorClassification);
 
                 await _auditService.LogAsync(
                     AuditAction.NetworkInterfaceSelected,
                     request.Ssid,
                     succeeded: false,
-                    $"Wi-Fi association to '{request.Ssid}' failed: {cleanError}",
+                    $"Wi-Fi association to '{request.Ssid}' failed: {cleanMessage} ({errorClassification})",
                     ct: ct).ConfigureAwait(false);
+
+                // Invariant verification on failure path
+                var failureInvariant = await SafeCaptureAndVerifyInvariantAsync(beforeSnapshot, ct).ConfigureAwait(false);
 
                 return new WifiConnectionResult
                 {
                     Succeeded = false,
+                    State = state,
                     ConnectedInterface = targetInterface.Name,
-                    Message = cleanError
+                    Message = cleanMessage,
+                    ErrorClassification = errorClassification,
+                    CanRetry = canRetry,
+                    IsUnsupportedAuthMode = isUnsupported,
+                    SuggestedAlternative = alt,
+                    InvariantResult = failureInvariant,
+                    PreservedPrimaryConnection = failureInvariant.IsStable
                 };
             }
 
@@ -287,23 +432,13 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             await Task.Delay(1200, ct).ConfigureAwait(false);
 
             // Capture post-connection routing snapshot & verify invariant
-            NetworkRoutingSnapshot? afterSnapshot = null;
-            try
-            {
-                afterSnapshot = await _inventoryService.CaptureRoutingSnapshotAsync(ct).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not capture post-connection routing snapshot");
-            }
-
-            var invariant = _inventoryService.VerifyRoutingInvariant(beforeSnapshot, afterSnapshot);
+            var invariant = await SafeCaptureAndVerifyInvariantAsync(beforeSnapshot, ct).ConfigureAwait(false);
 
             // Evaluate primary connection preservation
             bool primaryPreserved = true;
             if (hasMultipleAdapters)
             {
-                // On multi-adapter systems, the default gateway and primary interface must remain unchanged
+                // On multi-adapter systems, default gateway and primary interface must remain unchanged
                 primaryPreserved = invariant.IsStable;
             }
             else
@@ -316,7 +451,7 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             {
                 Ssid = request.Ssid,
                 InterfaceName = targetInterface.Name,
-                IPv4Address = afterSnapshot?.DefaultGateway,
+                IPv4Address = invariant.AfterSnapshot?.DefaultGateway,
                 IsPrimaryInternet = !hasMultipleAdapters || targetInterface.IsPrimaryInternet,
                 IsCctvNetwork = true,
                 ConnectedAtUtc = DateTime.UtcNow
@@ -324,6 +459,20 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
 
             // Register as active CCTV interface in selection service
             _selectionService.SetCctvInterface(targetInterface, connectionInfo);
+
+            // Save credentials to Keychain if user opted in
+            if (request.RememberInKeychain && _credentialStore != null && !string.IsNullOrEmpty(effectivePassword))
+            {
+                try
+                {
+                    await _credentialStore.SaveCredentialsAsync($"wifi:{request.Ssid}", "wifi", effectivePassword, ct).ConfigureAwait(false);
+                    _logger.LogInformation("Stored Wi-Fi credentials in OS Keychain for SSID {Ssid}", request.Ssid);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to persist credentials to OS Keychain for SSID {Ssid}", request.Ssid);
+                }
+            }
 
             await _auditService.LogAsync(
                 AuditAction.NetworkInterfaceSelected,
@@ -335,29 +484,75 @@ public sealed class MacWifiNetworkManager : IWifiNetworkManager
             return new WifiConnectionResult
             {
                 Succeeded = true,
+                State = WifiConnectionState.Connected,
                 ConnectedInterface = targetInterface.Name,
                 PreservedPrimaryConnection = primaryPreserved,
                 InvariantResult = invariant,
+                CanRetry = false,
                 Message = $"Connected to \"{request.Ssid}\" on {targetInterface.Name}. {invariant.StatusText}"
             };
         }
         catch (OperationCanceledException)
         {
+            bool isExplicitCancel = ct.IsCancellationRequested;
+            var cancelledState = isExplicitCancel ? WifiConnectionState.Cancelled : WifiConnectionState.TimedOut;
+            var cancelledMessage = isExplicitCancel
+                ? "Connection cancelled by operator."
+                : "Connection attempt timed out waiting for association or DHCP lease.";
+
+            _logger.LogInformation("Wi-Fi connection to {Ssid} terminated: {State}", request.Ssid, cancelledState);
+
+            var cancelInvariant = await SafeCaptureAndVerifyInvariantAsync(beforeSnapshot, CancellationToken.None).ConfigureAwait(false);
+
             return new WifiConnectionResult
             {
                 Succeeded = false,
+                State = cancelledState,
                 ConnectedInterface = targetInterface.Name,
-                Message = "Connection attempt timed out or was cancelled by operator."
+                CanRetry = true,
+                Message = cancelledMessage,
+                InvariantResult = cancelInvariant,
+                PreservedPrimaryConnection = cancelInvariant.IsStable
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error while connecting to Wi-Fi network");
+            _logger.LogError(ex, "Error while connecting to Wi-Fi network {Ssid}", request.Ssid);
+
+            var errInvariant = await SafeCaptureAndVerifyInvariantAsync(beforeSnapshot, CancellationToken.None).ConfigureAwait(false);
+
             return new WifiConnectionResult
             {
                 Succeeded = false,
+                State = WifiConnectionState.AuthenticationFailed,
                 ConnectedInterface = targetInterface.Name,
-                Message = $"Connection failed: {ex.Message}"
+                CanRetry = true,
+                Message = $"Connection failed: {ex.Message}",
+                InvariantResult = errInvariant,
+                PreservedPrimaryConnection = errInvariant.IsStable
+            };
+        }
+        finally
+        {
+            process?.Dispose();
+        }
+    }
+
+    private async Task<RoutingInvariantResult> SafeCaptureAndVerifyInvariantAsync(NetworkRoutingSnapshot? beforeSnapshot, CancellationToken ct)
+    {
+        try
+        {
+            var afterSnapshot = await _inventoryService.CaptureRoutingSnapshotAsync(ct).ConfigureAwait(false);
+            return _inventoryService.VerifyRoutingInvariant(beforeSnapshot, afterSnapshot);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not capture post-connection routing snapshot for invariant check");
+            return new RoutingInvariantResult
+            {
+                IsStable = true,
+                VerificationSucceeded = false,
+                StatusText = "Could not verify post-connection routing invariant."
             };
         }
     }

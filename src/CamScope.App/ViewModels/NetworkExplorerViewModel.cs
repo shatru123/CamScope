@@ -21,8 +21,10 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
     private readonly IAuditService _auditService;
     private readonly IWifiNetworkManager _wifiNetworkManager;
     private readonly ILogger<NetworkExplorerViewModel> _logger;
+    private readonly ICredentialStore? _credentialStore;
 
     private CancellationTokenSource? _subnetScanCts;
+    private CancellationTokenSource? _connectCts;
     private bool _disposed;
 
     [ObservableProperty] private bool _isLoading;
@@ -72,7 +74,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
     public IReadOnlyList<string> BandFilterOptions { get; } = ["All", "5 GHz", "2.4 GHz"];
     public IReadOnlyList<string> SortOptions { get; } = ["Signal Strength", "SSID (A-Z)", "Channel"];
 
-    // In-App Wi-Fi Connect Modal Properties
+    // In-App Wi-Fi Connect Modal Properties & 9-State Lifecycle
     [ObservableProperty] private bool _isConnectModalOpen;
     [ObservableProperty] private bool _isWifiModalOpen; // Backward compatibility with previous binding
     [ObservableProperty] private string _modalTargetSsid = string.Empty;
@@ -86,6 +88,48 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
 
     public char PasswordMaskChar => IsPasswordVisible ? '\0' : '•';
     public string PasswordToggleText => IsPasswordVisible ? "Hide" : "Show";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConnectionStateBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ConnectionStateBadgeColor))]
+    [NotifyPropertyChangedFor(nameof(IsAuthFailed))]
+    [NotifyPropertyChangedFor(nameof(IsTerminalFailed))]
+    private WifiConnectionState _connectionState = WifiConnectionState.AwaitingCredentials;
+
+    public string ConnectionStateBadgeText => ConnectionState switch
+    {
+        WifiConnectionState.DiscoveringNetworks => "Discovering Networks",
+        WifiConnectionState.AwaitingCredentials => "Awaiting Credentials",
+        WifiConnectionState.Connecting => "Connecting...",
+        WifiConnectionState.Connected => "Connected",
+        WifiConnectionState.AuthenticationFailed => "Authentication Failed",
+        WifiConnectionState.PermissionDenied => "Permission Denied",
+        WifiConnectionState.NetworkUnavailable => "Network Unavailable",
+        WifiConnectionState.TimedOut => "Connection Timed Out",
+        WifiConnectionState.Cancelled => "Connection Cancelled",
+        _ => "Idle"
+    };
+
+    public string ConnectionStateBadgeColor => ConnectionState switch
+    {
+        WifiConnectionState.Connected => "#10B981", // Green
+        WifiConnectionState.Connecting => "#06B6D4", // Cyan
+        WifiConnectionState.AuthenticationFailed => "#EF4444", // Red
+        WifiConnectionState.PermissionDenied or WifiConnectionState.TimedOut => "#F59E0B", // Amber
+        WifiConnectionState.Cancelled or WifiConnectionState.NetworkUnavailable => "#94A3B8", // Slate
+        WifiConnectionState.DiscoveringNetworks => "#3B82F6", // Blue
+        _ => "#8B5CF6" // Violet
+    };
+
+    public bool IsAuthFailed => ConnectionState == WifiConnectionState.AuthenticationFailed;
+    public bool IsTerminalFailed => ConnectionState is WifiConnectionState.PermissionDenied or WifiConnectionState.NetworkUnavailable;
+
+    [ObservableProperty] private string? _errorClassification;
+    [ObservableProperty] private bool _canRetry;
+    [ObservableProperty] private bool _isUnsupportedAuthMode;
+    [ObservableProperty] private string? _suggestedAlternative;
+    [ObservableProperty] private bool _rememberCredentialsInStore;
+    [ObservableProperty] private bool _showAuthorizedAlternatives;
 
     [ObservableProperty] private string? _passwordValidationError;
     [ObservableProperty] private bool _isConnectingWifi;
@@ -102,6 +146,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
     public ObservableCollection<WifiNetworkInfo> WifiNetworks { get; } = [];
     public ObservableCollection<WifiNetworkInfo> FilteredWifiNetworks { get; } = [];
     public ObservableCollection<NetworkInterfaceInfo> AvailableWifiInterfaces { get; } = [];
+    public ObservableCollection<NetworkInterfaceInfo> AvailableWiredInterfaces { get; } = [];
     public ObservableCollection<CameraDevice> SubnetDiscoveredDevices { get; } = [];
 
     public NetworkExplorerViewModel(
@@ -111,7 +156,8 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         IDeviceRepository deviceRepository,
         IAuditService auditService,
         IWifiNetworkManager wifiNetworkManager,
-        ILogger<NetworkExplorerViewModel> logger)
+        ILogger<NetworkExplorerViewModel> logger,
+        ICredentialStore? credentialStore = null)
     {
         _inventoryService = inventoryService;
         _selectionService = selectionService;
@@ -120,6 +166,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         _auditService = auditService;
         _wifiNetworkManager = wifiNetworkManager;
         _logger = logger;
+        _credentialStore = credentialStore;
 
         _selectionService.CctvInterfaceChanged += HandleCctvInterfaceChanged;
         UpdateCctvStatus();
@@ -134,7 +181,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         IDeviceRepository deviceRepository,
         IAuditService auditService,
         ILogger<NetworkExplorerViewModel> logger)
-        : this(inventoryService, selectionService, subnetScanner, deviceRepository, auditService, new CamScope.Infrastructure.Network.UnsupportedPlatformWifiNetworkManager(), logger)
+        : this(inventoryService, selectionService, subnetScanner, deviceRepository, auditService, new CamScope.Infrastructure.Network.UnsupportedPlatformWifiNetworkManager(), logger, null)
     {
     }
 
@@ -542,6 +589,49 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         IsPasswordVisible = false;
         UserConfirmedSingleAdapterSwitch = false;
 
+        ConnectionState = WifiConnectionState.AwaitingCredentials;
+        ErrorClassification = null;
+        CanRetry = false;
+        SuggestedAlternative = null;
+        ShowAuthorizedAlternatives = false;
+
+        // Check if 802.1X Enterprise mode
+        if (wifi.Security.Contains("802.1X", StringComparison.OrdinalIgnoreCase) ||
+            wifi.Security.Contains("Enterprise", StringComparison.OrdinalIgnoreCase) ||
+            wifi.Security.Contains("EAP", StringComparison.OrdinalIgnoreCase))
+        {
+            IsUnsupportedAuthMode = true;
+            ConnectionState = WifiConnectionState.AuthenticationFailed;
+            ErrorClassification = "Unsupported 802.1X Enterprise Authentication Mode";
+            SuggestedAlternative = "Enterprise networks require profile/certificate installation. Connect through macOS System Settings > Wi-Fi.";
+        }
+        else
+        {
+            IsUnsupportedAuthMode = false;
+        }
+
+        // Check for saved credentials in Keychain
+        if (_credentialStore != null)
+        {
+            try
+            {
+                var saved = await _credentialStore.GetCredentialsAsync($"wifi:{wifi.Ssid}");
+                if (saved.HasValue && !string.IsNullOrEmpty(saved.Value.Password))
+                {
+                    WifiPasswordInput = saved.Value.Password;
+                    RememberCredentialsInStore = true;
+                }
+                else
+                {
+                    RememberCredentialsInStore = false;
+                }
+            }
+            catch
+            {
+                RememberCredentialsInStore = false;
+            }
+        }
+
         AvailableWifiInterfaces.Clear();
         var wifiIfaces = await _wifiNetworkManager.GetWifiInterfacesAsync();
         if (wifiIfaces.Count == 0)
@@ -567,6 +657,13 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
                                        TargetInterfaceForConnect.IsPrimaryInternet ||
                                        AvailableWifiInterfaces.Count <= 1;
 
+        // Populate available wired interfaces for legitimate fallback alternative
+        AvailableWiredInterfaces.Clear();
+        foreach (var iface in Interfaces.Where(i => i.InterfaceKind != NetworkInterfaceKind.WiFi && !i.IsLoopback && i.IsUp))
+        {
+            AvailableWiredInterfaces.Add(iface);
+        }
+
         IsConnectModalOpen = true;
         IsWifiModalOpen = true;
     }
@@ -585,12 +682,23 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
     [RelayCommand]
     public void CloseConnectModal()
     {
+        _connectCts?.Cancel();
+        _connectCts?.Dispose();
+        _connectCts = null;
+
         WifiPasswordInput = string.Empty;
         PasswordValidationError = null;
         ConnectErrorMessage = null;
         ConnectStatusMessage = null;
         ConnectSuccess = false;
         ConnectSuccessMessage = null;
+        ConnectionState = WifiConnectionState.AwaitingCredentials;
+        ErrorClassification = null;
+        CanRetry = false;
+        IsUnsupportedAuthMode = false;
+        SuggestedAlternative = null;
+        ShowAuthorizedAlternatives = false;
+
         IsConnectModalOpen = false;
         IsWifiModalOpen = false;
     }
@@ -605,6 +713,46 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
     public void TogglePasswordVisibility()
     {
         IsPasswordVisible = !IsPasswordVisible;
+    }
+
+    [RelayCommand]
+    public void ToggleAuthorizedAlternatives()
+    {
+        ShowAuthorizedAlternatives = !ShowAuthorizedAlternatives;
+    }
+
+    [RelayCommand]
+    public void SelectWiredAlternative(NetworkInterfaceInfo? iface)
+    {
+        if (iface == null) return;
+
+        SelectedScanningInterface = iface;
+        _selectionService.SetCctvInterface(iface);
+
+        _ = _auditService.LogAsync(
+            AuditAction.NetworkInterfaceSelected,
+            iface.IPv4Address,
+            succeeded: true,
+            $"Operator switched to authorized wired interface '{iface.Name}' ({iface.HardwarePort}) for CCTV discovery");
+
+        CloseConnectModal();
+    }
+
+    [RelayCommand]
+    public void CancelConnectWifi()
+    {
+        _connectCts?.Cancel();
+        ConnectionState = WifiConnectionState.Cancelled;
+        ConnectErrorMessage = "Connection attempt cancelled by operator.";
+        CanRetry = true;
+        IsConnectingWifi = false;
+    }
+
+    [RelayCommand]
+    public async Task RetryConnectWifi()
+    {
+        ConnectErrorMessage = null;
+        await ConnectWifiAsync();
     }
 
     partial void OnTargetInterfaceForConnectChanged(NetworkInterfaceInfo? value)
@@ -640,12 +788,14 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         if (TargetWifi == null)
         {
             ConnectErrorMessage = "No Wi-Fi network selected.";
+            ConnectionState = WifiConnectionState.NetworkUnavailable;
             return;
         }
 
         if (TargetInterfaceForConnect == null)
         {
             ConnectErrorMessage = "No network interface selected for connection.";
+            ConnectionState = WifiConnectionState.NetworkUnavailable;
             return;
         }
 
@@ -655,12 +805,14 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
             if (string.IsNullOrWhiteSpace(WifiPasswordInput))
             {
                 PasswordValidationError = "Password is required for secured Wi-Fi network.";
+                ConnectionState = WifiConnectionState.AwaitingCredentials;
                 return;
             }
 
             if (WifiPasswordInput.Length < 8)
             {
                 PasswordValidationError = "WPA/WPA2/WPA3 password must be at least 8 characters.";
+                ConnectionState = WifiConnectionState.AwaitingCredentials;
                 return;
             }
         }
@@ -669,15 +821,22 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         if (RequiresSingleAdapterWarning && !UserConfirmedSingleAdapterSwitch)
         {
             ConnectErrorMessage = "Please acknowledge that connecting on a single adapter will alter your Mac's primary internet connection.";
+            ConnectionState = WifiConnectionState.AwaitingCredentials;
             return;
         }
 
+        _connectCts?.Cancel();
+        _connectCts?.Dispose();
+        _connectCts = new CancellationTokenSource();
+
         IsConnectingWifi = true;
+        ConnectionState = WifiConnectionState.Connecting;
         ConnectStatusMessage = $"Connecting to \"{TargetWifi.Ssid}\" on {TargetInterfaceForConnect.Name}...";
         ConnectErrorMessage = null;
         ConnectSuccess = false;
         ConnectSuccessMessage = null;
         PasswordValidationError = null;
+        CanRetry = false;
 
         try
         {
@@ -686,10 +845,17 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
                 Ssid = TargetWifi.Ssid,
                 Password = WifiPasswordInput,
                 InterfaceName = TargetInterfaceForConnect.Name,
-                AllowSwitchingPrimaryIfSingleAdapter = UserConfirmedSingleAdapterSwitch
+                AllowSwitchingPrimaryIfSingleAdapter = UserConfirmedSingleAdapterSwitch,
+                RememberInKeychain = RememberCredentialsInStore
             };
 
-            var result = await _wifiNetworkManager.ConnectAsync(req);
+            var result = await _wifiNetworkManager.ConnectAsync(req, _connectCts.Token);
+
+            ConnectionState = result.State;
+            ErrorClassification = result.ErrorClassification;
+            CanRetry = result.CanRetry;
+            IsUnsupportedAuthMode = result.IsUnsupportedAuthMode;
+            SuggestedAlternative = result.SuggestedAlternative;
 
             if (result.Succeeded)
             {
@@ -713,6 +879,19 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
                     ConnectSuccessMessage = $"Connected to '{TargetWifi.Ssid}' on adapter {result.ConnectedInterface}. Primary connection switched as requested.";
                 }
 
+                // If user opted in, save to credential store if available
+                if (RememberCredentialsInStore && _credentialStore != null && !string.IsNullOrEmpty(WifiPasswordInput))
+                {
+                    try
+                    {
+                        await _credentialStore.SaveCredentialsAsync($"wifi:{TargetWifi.Ssid}", "wifi", WifiPasswordInput);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to persist credentials from ViewModel");
+                    }
+                }
+
                 // Clear password immediately (never retain in memory)
                 WifiPasswordInput = string.Empty;
 
@@ -726,13 +905,22 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
             }
             else
             {
-                ConnectErrorMessage = $"Connection failed: {result.Message}";
+                ConnectErrorMessage = result.Message;
+                // If authentication failed, keep password in field for quick correction and retry
             }
+        }
+        catch (OperationCanceledException)
+        {
+            ConnectionState = WifiConnectionState.Cancelled;
+            ConnectErrorMessage = "Connection attempt cancelled by operator.";
+            CanRetry = true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error connecting to Wi-Fi {Ssid}", TargetWifi.Ssid);
+            ConnectionState = WifiConnectionState.AuthenticationFailed;
             ConnectErrorMessage = $"Error: {ex.Message}";
+            CanRetry = true;
         }
         finally
         {
@@ -813,6 +1001,8 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         _disposed = true;
         _selectionService.CctvInterfaceChanged -= HandleCctvInterfaceChanged;
         _subnetScanCts?.Dispose();
+        _connectCts?.Cancel();
+        _connectCts?.Dispose();
     }
 
     public static ReachabilityDiagnostic EvaluateReachability(NetworkInterfaceInfo? iface, string? defaultGateway)

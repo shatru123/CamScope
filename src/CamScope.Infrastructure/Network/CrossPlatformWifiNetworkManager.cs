@@ -31,6 +31,7 @@ public sealed class LinuxWifiNetworkManager : IWifiNetworkManager
         return Task.FromResult(new WifiConnectionResult
         {
             Succeeded = false,
+            State = WifiConnectionState.PermissionDenied,
             Message = "Linux NetworkManager integration is not configured on this host."
         });
     }
@@ -68,6 +69,7 @@ public sealed class WindowsWifiNetworkManager : IWifiNetworkManager
         return Task.FromResult(new WifiConnectionResult
         {
             Succeeded = false,
+            State = WifiConnectionState.PermissionDenied,
             Message = "Windows WLAN service integration is not configured on this host."
         });
     }
@@ -98,6 +100,7 @@ public sealed class UnsupportedPlatformWifiNetworkManager : IWifiNetworkManager
         return Task.FromResult(new WifiConnectionResult
         {
             Succeeded = false,
+            State = WifiConnectionState.PermissionDenied,
             Message = "Wi-Fi management is not supported on this platform."
         });
     }

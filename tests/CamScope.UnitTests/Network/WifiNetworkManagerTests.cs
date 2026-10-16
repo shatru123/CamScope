@@ -190,4 +190,58 @@ public class WifiNetworkManagerTests
         Assert.True(securedNet.IsSecured);
         Assert.Equal("5 GHz", securedNet.BandGroup);
     }
+
+    [Theory]
+    [InlineData("Failed to join network Office_5G. Error: (-3905)", -3905, WifiConnectionState.AuthenticationFailed, true, false)]
+    [InlineData("Failed to join network. Error: (-3906)", -3906, WifiConnectionState.AuthenticationFailed, true, false)]
+    [InlineData("Authentication failed: incorrect password.", -1, WifiConnectionState.AuthenticationFailed, true, false)]
+    [InlineData("Error: (-3907) Password incorrect", -3907, WifiConnectionState.AuthenticationFailed, true, false)]
+    [InlineData("Could not find network Lab_AP. Error: (-3900)", -3900, WifiConnectionState.NetworkUnavailable, true, false)]
+    [InlineData("No network with that name. (-3901)", -3901, WifiConnectionState.NetworkUnavailable, true, false)]
+    [InlineData("You must be an administrator to join this network. Error: (-3903)", -3903, WifiConnectionState.PermissionDenied, false, false)]
+    [InlineData("This network requires 802.1X Enterprise authentication. (-3915)", -3915, WifiConnectionState.AuthenticationFailed, false, true)]
+    [InlineData("EAP enterprise authentication profile required", -1, WifiConnectionState.AuthenticationFailed, false, true)]
+    public void ClassifyNetworksetupError_ClassifiesCorrectly(
+        string output, int exitCode, WifiConnectionState expectedState, bool expectedCanRetry, bool expectedUnsupported)
+    {
+        var (state, cleanMessage, errorClassification, canRetry, isUnsupported, alt) =
+            MacWifiNetworkManager.ClassifyNetworksetupError(output, exitCode);
+
+        Assert.Equal(expectedState, state);
+        Assert.Equal(expectedCanRetry, canRetry);
+        Assert.Equal(expectedUnsupported, isUnsupported);
+        Assert.NotNull(cleanMessage);
+        Assert.NotEmpty(cleanMessage);
+        Assert.NotNull(errorClassification);
+
+        if (expectedState == WifiConnectionState.AuthenticationFailed && !expectedUnsupported)
+        {
+            Assert.Contains("Authentication failed", cleanMessage, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (expectedUnsupported)
+        {
+            Assert.Contains("Enterprise", cleanMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("macOS System Settings", cleanMessage, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task MacWifiNetworkManager_PreAndPostRoutingInvariant_VerifiedOnFailure()
+    {
+        var inventory = new FakeInventoryService();
+        var selection = new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance);
+        var audit = new FakeAuditService();
+        var manager = new MacWifiNetworkManager(inventory, selection, audit, NullLogger<MacWifiNetworkManager>.Instance);
+
+        // Empty SSID fails immediately
+        var result = await manager.ConnectAsync(new WifiConnectRequest
+        {
+            Ssid = "",
+            InterfaceName = "en0"
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(WifiConnectionState.AwaitingCredentials, result.State);
+    }
 }

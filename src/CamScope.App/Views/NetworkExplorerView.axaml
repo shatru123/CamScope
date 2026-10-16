@@ -366,13 +366,15 @@
               BorderThickness="1" CornerRadius="12" Padding="24">
         <StackPanel Spacing="16">
 
-          <!-- Modal Header -->
-          <Grid ColumnDefinitions="Auto, *, Auto">
-            <Border Grid.Column="0" Classes="badgeCyan" VerticalAlignment="Center" Margin="0,0,10,0">
-              <TextBlock Text="WI-FI MANAGER" FontSize="10" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
-            </Border>
-            <TextBlock Grid.Column="1" Text="Connect to Wi-Fi Network" FontSize="16" FontWeight="SemiBold"
-                       Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+          <!-- Modal Header with Explicit State Badge -->
+          <Grid ColumnDefinitions="*, Auto, Auto">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+              <TextBlock Text="Connect to Wi-Fi Network" FontSize="16" FontWeight="SemiBold"
+                         Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+              <Border CornerRadius="4" Padding="6,2" Background="{Binding ConnectionStateBadgeColor}" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ConnectionStateBadgeText}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+              </Border>
+            </StackPanel>
             <Button Grid.Column="2" Content="✕" Command="{Binding CloseConnectModalCommand}"
                     Classes="secondary" FontSize="12" Padding="6,2" VerticalAlignment="Center"/>
           </Grid>
@@ -397,6 +399,21 @@
                 </Border>
                 <TextBlock Text="{Binding TargetWifi.SignalText, FallbackValue='Signal: Unknown'}" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
               </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- Enterprise 802.1X Warning Card -->
+          <Border Background="#1E1738" BorderBrush="{StaticResource VioletAccent}" BorderThickness="1"
+                  CornerRadius="8" Padding="12" IsVisible="{Binding IsUnsupportedAuthMode}">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="Auto, *">
+                <TextBlock Grid.Column="0" Text="🔒 " FontSize="14" Foreground="{StaticResource VioletAccent}" VerticalAlignment="Top"/>
+                <TextBlock Grid.Column="1" Text="802.1X Enterprise Authentication Detected" FontSize="12" FontWeight="Bold" Foreground="{StaticResource VioletAccent}"/>
+              </Grid>
+              <TextBlock Text="This network uses 802.1X Enterprise (EAP/RADIUS) authentication with certificates or enterprise credentials. macOS requires these to be configured via System Settings or a Configuration Profile. Direct in-app password entry is not supported for 802.1X."
+                         FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="16"/>
+              <Button Content="Open macOS Wi-Fi Settings..." Command="{Binding OpenSystemSettingsCommand}"
+                      Classes="primary" HorizontalAlignment="Left" Padding="12,6"/>
             </StackPanel>
           </Border>
 
@@ -463,11 +480,35 @@
                        IsVisible="{Binding PasswordValidationError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
           </StackPanel>
 
+          <!-- Secure Keychain Opt-in Checkbox -->
+          <CheckBox IsChecked="{Binding RememberCredentialsInStore}"
+                    IsVisible="{Binding TargetWifi.IsSecured, FallbackValue=True}"
+                    Content="Remember credentials in macOS Keychain"
+                    FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+
           <!-- Open Network Notice -->
           <Border Background="#10233B" Padding="10" CornerRadius="6"
                   IsVisible="{Binding !TargetWifi.IsSecured, FallbackValue=False}">
             <TextBlock Text="This network is open (no encryption). No password is required to connect."
                        FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+          </Border>
+
+          <!-- Authentication Failure Card -->
+          <Border Background="#2E1114" BorderBrush="{StaticResource RedDanger}" BorderThickness="1"
+                  CornerRadius="8" Padding="12" IsVisible="{Binding IsAuthFailed}">
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="Auto, *">
+                <TextBlock Grid.Column="0" Text="❌ " FontSize="14" Foreground="{StaticResource RedDanger}" VerticalAlignment="Top"/>
+                <TextBlock Grid.Column="1" Text="Authentication Failed" FontSize="12" FontWeight="Bold" Foreground="{StaticResource RedDanger}"/>
+              </Grid>
+              <TextBlock Text="Authentication failed. Check the password and try again."
+                         FontSize="12" FontWeight="SemiBold" Foreground="#FFFFFF"/>
+              <TextBlock Text="{Binding ErrorClassification}"
+                         FontSize="10" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"
+                         IsVisible="{Binding ErrorClassification, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <TextBlock Text="CamScope adheres to strict security standards: it never brute-forces or bypasses encryption. Edit the password above and click Retry Connection, or explore authorized alternatives below."
+                         FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+            </StackPanel>
           </Border>
 
           <!-- Progress / Error / Success Messages -->
@@ -478,7 +519,7 @@
               <TextBlock Text="{Binding ConnectStatusMessage}" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
             </StackPanel>
 
-            <!-- Error Banner -->
+            <!-- Error Banner (When not in auth failed card) -->
             <Border Background="#2B1214" BorderBrush="{StaticResource RedDanger}" BorderThickness="1"
                     CornerRadius="6" Padding="10"
                     IsVisible="{Binding ConnectErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -493,6 +534,91 @@
             </Border>
           </StackPanel>
 
+          <!-- Expandable Authorized Alternatives Accordion -->
+          <Border Background="#101826" BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1"
+                  CornerRadius="8" Padding="10">
+            <StackPanel Spacing="8">
+              <Button Command="{Binding ToggleAuthorizedAlternativesCommand}"
+                      Classes="secondary" HorizontalAlignment="Stretch" Padding="8,6">
+                <Grid ColumnDefinitions="*, Auto">
+                  <TextBlock Grid.Column="0" Text="Don't know the password? View Authorized Alternatives"
+                             FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource CyanAccent}"/>
+                  <TextBlock Grid.Column="1" Text="▾" FontSize="12" Foreground="{StaticResource CyanAccent}"/>
+                </Grid>
+              </Button>
+
+              <StackPanel Spacing="10" IsVisible="{Binding ShowAuthorizedAlternatives}" Margin="0,4,0,0">
+                <!-- Option 1: Switch to Wired Ethernet -->
+                <Border Background="#142132" CornerRadius="6" Padding="10">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="Option 1: Switch to Authorized Wired Ethernet (Recommended)"
+                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource GreenSuccess}"/>
+                    <TextBlock Text="Wired connections bypass Wi-Fi authentication entirely and offer zero-jitter camera streaming."
+                               FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+
+                    <ItemsControl ItemsSource="{Binding AvailableWiredInterfaces}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                          <Grid ColumnDefinitions="*, Auto" Margin="0,2">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                              <TextBlock Text="{Binding HardwarePort, StringFormat='({0})'}" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                              <TextBlock Text="{Binding IPv4Address}" Foreground="{StaticResource CyanAccent}" FontSize="11"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Use for CCTV"
+                                    Command="{Binding $parent[UserControl].((vm:NetworkExplorerViewModel)DataContext).SelectWiredAlternativeCommand}"
+                                    CommandParameter="{Binding}"
+                                    Classes="secondary" FontSize="10" Padding="8,2"/>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="No active wired adapters detected. Connect a USB-C Ethernet adapter for direct camera access."
+                               FontSize="10" Foreground="{StaticResource TextMuted}"
+                               IsVisible="{Binding !AvailableWiredInterfaces.Count}"/>
+                  </StackPanel>
+                </Border>
+
+                <!-- Option 2: Request Admin Access -->
+                <Border Background="#142132" CornerRadius="6" Padding="10">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="Option 2: Network Administrator Access Request"
+                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                    <TextBlock Text="If this is an enterprise or facility CCTV network, contact your network administrator to obtain the WPA passphrase, access credentials, or request device MAC address whitelisting."
+                               FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Border>
+
+                <!-- Option 3: Dedicated CCTV VLAN -->
+                <Border Background="#142132" CornerRadius="6" Padding="10">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="Option 3: Dedicated CCTV VLAN / Guest Network"
+                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                    <TextBlock Text="Cameras may be partitioned on an isolated security VLAN or secondary SSID. Verify with site operations whether cameras are hosted on a separate IoT network."
+                               FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Border>
+
+                <!-- Option 4: Hardware Router Reset & Configuration Guide -->
+                <Border Background="#142132" CornerRadius="6" Padding="10">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="Option 4: Router Administration &amp; Hardware Reset"
+                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+                    <TextBlock Text="If you are the authorized owner of the camera access point: access the router admin portal (typically http://192.168.1.1) to view or reset the WPA key, or consult the manufacturer guide to perform a physical hardware reset to restore documented factory defaults."
+                               FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Border>
+
+                <!-- Security Policy Banner -->
+                <Border Background="#1B1424" BorderBrush="{StaticResource VioletAccent}" BorderThickness="1" CornerRadius="6" Padding="8">
+                  <TextBlock Text="Security Guarantee: CamScope never attempts to crack passwords, bypass encryption, or exploit router vulnerabilities."
+                             FontSize="10" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                </Border>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
           <!-- Modal Action Buttons -->
           <Grid ColumnDefinitions="Auto, *, Auto, Auto" Margin="0,8,0,0">
             <Button Grid.Column="0" Content="macOS Settings..." Command="{Binding OpenSystemSettingsCommand}"
@@ -500,10 +626,17 @@
             <Button Grid.Column="2" Content="Cancel" Command="{Binding CloseConnectModalCommand}"
                     Classes="secondary" Margin="0,0,8,0"/>
             <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
-              <Button Content="Disconnect" Command="{Binding DisconnectWifiAsyncCommand}"
-                      Classes="danger" IsEnabled="{Binding !IsConnectingWifi}"/>
+              <!-- In-flight Cancel Button -->
+              <Button Content="Stop Connecting" Command="{Binding CancelConnectWifiCommand}"
+                      Classes="danger" IsVisible="{Binding IsConnectingWifi}"/>
+
+              <!-- Retry Button (Shown on retryable failure) -->
+              <Button Content="Retry Connection" Command="{Binding RetryConnectWifiCommand}"
+                      Classes="primary" IsVisible="{Binding CanRetry}" IsEnabled="{Binding !IsConnectingWifi}"/>
+
+              <!-- Standard Connect Button (Shown when not in retry state and not connecting) -->
               <Button Content="Connect" Command="{Binding ConnectWifiAsyncCommand}"
-                      Classes="primary" IsEnabled="{Binding !IsConnectingWifi}"/>
+                      Classes="primary" IsVisible="{Binding !CanRetry}" IsEnabled="{Binding !IsConnectingWifi}"/>
             </StackPanel>
           </Grid>
 
