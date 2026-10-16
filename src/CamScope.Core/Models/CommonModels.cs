@@ -154,6 +154,14 @@ public sealed class WifiConnectRequest
     public bool RememberInKeychain { get; set; }
 }
 
+public enum SecondaryAdapterCapability
+{
+    Capable,
+    SingleAdapterConflict,
+    NotApplicable,
+    Unknown
+}
+
 public sealed class WifiConnectionResult
 {
     public bool Succeeded { get; set; }
@@ -166,6 +174,7 @@ public sealed class WifiConnectionResult
     public string? ConnectedInterface { get; set; }
     public string? AssignedIp { get; set; }
     public bool PreservedPrimaryConnection { get; set; }
+    public bool RouteRollbackAttempted { get; set; }
     public RoutingInvariantResult? InvariantResult { get; set; }
 }
 

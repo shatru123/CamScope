@@ -80,6 +80,7 @@ public partial class App : Avalonia.Application
         // Wi-Fi Network Manager
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
+            services.AddSingleton<IMacCoreWlanConnector, MacCoreWlanConnector>();
             services.AddSingleton<IWifiNetworkManager, MacWifiNetworkManager>();
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))

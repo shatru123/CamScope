@@ -451,13 +451,14 @@
             <StackPanel Spacing="8">
               <Grid ColumnDefinitions="Auto, *">
                 <TextBlock Grid.Column="0" Text="⚠ " FontSize="14" Foreground="{StaticResource AmberWarning}" VerticalAlignment="Top"/>
-                <TextBlock Grid.Column="1" Text="Single Adapter Concurrency Notice" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
+                <TextBlock Grid.Column="1" Text="Primary Internet Preservation Enforced" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AmberWarning}"/>
               </Grid>
-              <TextBlock Text="Your Mac is currently using this Wi-Fi adapter for its primary internet connection. Single physical Wi-Fi hardware cannot connect to two SSIDs simultaneously. Connecting will alter your system-wide internet route.&#x0a;&#x0a;To discover CCTV cameras on an isolated Wi-Fi network without disrupting your primary internet, attach a secondary physical adapter (such as a USB-C Ethernet or Wi-Fi adapter) and select it above."
+              <TextBlock Text="CamScope strictly protects your Mac's primary internet connection. The selected adapter is currently carrying system internet traffic (or is the sole physical Wi-Fi hardware). CamScope will not disrupt or alter your primary internet route.&#x0a;&#x0a;To discover CCTV cameras on an isolated Wi-Fi network, attach a secondary physical adapter (such as a USB-C Ethernet or secondary Wi-Fi adapter) and select it above, or choose an authorized wired alternative below."
                          FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="16"/>
-              <CheckBox IsChecked="{Binding UserConfirmedSingleAdapterSwitch}"
-                        Content="I acknowledge and authorize switching the primary Wi-Fi connection"
-                        FontSize="11" Foreground="{StaticResource AmberWarning}"/>
+              <Border Background="#3B2E10" CornerRadius="6" Padding="8,6">
+                <TextBlock Text="🔒 Standard connection is locked to protect primary internet. Attach a secondary adapter to connect."
+                           FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AmberWarning}"/>
+              </Border>
             </StackPanel>
           </Border>
 

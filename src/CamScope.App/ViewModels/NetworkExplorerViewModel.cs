@@ -652,10 +652,8 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
                                     ?? AvailableWifiInterfaces.FirstOrDefault();
 
         CanSupportConcurrentConnections = _wifiNetworkManager.CanSupportConcurrentConnections;
-
-        RequiresSingleAdapterWarning = TargetInterfaceForConnect == null ||
-                                       TargetInterfaceForConnect.IsPrimaryInternet ||
-                                       AvailableWifiInterfaces.Count <= 1;
+        TargetAdapterCapability = await _wifiNetworkManager.CheckSecondaryCapabilityAsync(TargetInterfaceForConnect?.Name);
+        RequiresSingleAdapterWarning = TargetAdapterCapability == SecondaryAdapterCapability.SingleAdapterConflict;
 
         // Populate available wired interfaces for legitimate fallback alternative
         AvailableWiredInterfaces.Clear();
@@ -746,6 +744,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         ConnectErrorMessage = "Connection attempt cancelled by operator.";
         CanRetry = true;
         IsConnectingWifi = false;
+        WifiPasswordInput = string.Empty;
     }
 
     [RelayCommand]
@@ -755,11 +754,17 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
         await ConnectWifiAsync();
     }
 
+    [ObservableProperty] private SecondaryAdapterCapability _targetAdapterCapability = SecondaryAdapterCapability.Capable;
+
     partial void OnTargetInterfaceForConnectChanged(NetworkInterfaceInfo? value)
     {
-        RequiresSingleAdapterWarning = value == null ||
-                                       value.IsPrimaryInternet ||
-                                       AvailableWifiInterfaces.Count <= 1;
+        _ = CheckTargetAdapterCapabilityAsync(value?.Name);
+    }
+
+    private async Task CheckTargetAdapterCapabilityAsync(string? interfaceName)
+    {
+        TargetAdapterCapability = await _wifiNetworkManager.CheckSecondaryCapabilityAsync(interfaceName);
+        RequiresSingleAdapterWarning = TargetAdapterCapability == SecondaryAdapterCapability.SingleAdapterConflict;
         UserConfirmedSingleAdapterSwitch = false;
     }
 
@@ -817,11 +822,13 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
             }
         }
 
-        // Validate concurrency confirmation
-        if (RequiresSingleAdapterWarning && !UserConfirmedSingleAdapterSwitch)
+        // Enforce strict primary network preservation
+        var capability = await _wifiNetworkManager.CheckSecondaryCapabilityAsync(TargetInterfaceForConnect.Name);
+        if (capability == SecondaryAdapterCapability.SingleAdapterConflict)
         {
-            ConnectErrorMessage = "Please acknowledge that connecting on a single adapter will alter your Mac's primary internet connection.";
+            ConnectErrorMessage = $"Primary network preservation enforced: Interface '{TargetInterfaceForConnect.Name}' is your Mac's primary internet connection (or the sole physical Wi-Fi adapter). Connecting to \"{TargetWifi.Ssid}\" would alter your primary internet route. Attach a secondary adapter (USB-C Ethernet or secondary Wi-Fi) or select an authorized wired interface below.";
             ConnectionState = WifiConnectionState.AwaitingCredentials;
+            ShowAuthorizedAlternatives = true;
             return;
         }
 
@@ -845,7 +852,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
                 Ssid = TargetWifi.Ssid,
                 Password = WifiPasswordInput,
                 InterfaceName = TargetInterfaceForConnect.Name,
-                AllowSwitchingPrimaryIfSingleAdapter = UserConfirmedSingleAdapterSwitch,
+                AllowSwitchingPrimaryIfSingleAdapter = false,
                 RememberInKeychain = RememberCredentialsInStore
             };
 
@@ -999,6 +1006,7 @@ public sealed partial class NetworkExplorerViewModel : ViewModelBase, IDisposabl
     {
         if (_disposed) return;
         _disposed = true;
+        WifiPasswordInput = string.Empty;
         _selectionService.CctvInterfaceChanged -= HandleCctvInterfaceChanged;
         _subnetScanCts?.Dispose();
         _connectCts?.Cancel();

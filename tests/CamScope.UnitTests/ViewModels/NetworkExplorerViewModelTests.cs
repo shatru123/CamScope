@@ -188,6 +188,7 @@ public class NetworkExplorerViewModelTests
     {
         public bool IsPlatformSupported { get; set; } = true;
         public bool CanSupportConcurrentConnections { get; set; } = false;
+        public SecondaryAdapterCapability SecondaryCapabilityToReturn { get; set; } = SecondaryAdapterCapability.Capable;
         public List<WifiNetworkInfo> AvailableNetworks { get; set; } = [];
         public List<WifiConnectionInfo> CurrentConnections { get; set; } = [];
         public List<NetworkInterfaceInfo> WifiInterfaces { get; set; } = [];
@@ -228,6 +229,9 @@ public class NetworkExplorerViewModelTests
 
         public Task<WifiConnectionStatus> GetConnectionStatusAsync(string interfaceName, CancellationToken ct = default)
             => Task.FromResult(StatusToReturn);
+
+        public Task<SecondaryAdapterCapability> CheckSecondaryCapabilityAsync(string? targetInterfaceName, CancellationToken ct = default)
+            => Task.FromResult(SecondaryCapabilityToReturn);
     }
 
     [Fact]
@@ -755,9 +759,12 @@ public class NetworkExplorerViewModelTests
     }
 
     [Fact]
-    public async Task WifiModal_EnforcesSingleAdapterWarning_RequiresConfirmation()
+    public async Task WifiModal_EnforcesPrimaryPreservation_StopsSafely()
     {
-        var wifiManager = new FakeWifiNetworkManager();
+        var wifiManager = new FakeWifiNetworkManager
+        {
+            SecondaryCapabilityToReturn = SecondaryAdapterCapability.SingleAdapterConflict
+        };
         var vm = new NetworkExplorerViewModel(
             new FakeNetworkInventoryService(),
             new NetworkSelectionService(NullLogger<NetworkSelectionService>.Instance),
@@ -770,20 +777,22 @@ public class NetworkExplorerViewModelTests
         var targetWifi = new WifiNetworkInfo { Ssid = "TargetNet", Security = "None" };
         await vm.OpenConnectModalAsync(targetWifi);
 
-        // Single adapter topology detected
+        // Single adapter conflict topology detected
         Assert.True(vm.RequiresSingleAdapterWarning);
 
-        // Attempting to connect without checkbox confirmation fails
-        vm.UserConfirmedSingleAdapterSwitch = false;
+        // Attempting to connect stops safely with primary preservation notice
         await vm.ConnectWifiAsync();
 
         Assert.NotNull(vm.ConnectErrorMessage);
-        Assert.Contains("acknowledge", vm.ConnectErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Primary network preservation enforced", vm.ConnectErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(vm.ShowAuthorizedAlternatives);
 
-        // Confirming allows connection
-        vm.UserConfirmedSingleAdapterSwitch = true;
+        // When a secondary capable adapter is present
+        wifiManager.SecondaryCapabilityToReturn = SecondaryAdapterCapability.Capable;
+        await vm.OpenConnectModalAsync(targetWifi);
+        Assert.False(vm.RequiresSingleAdapterWarning);
+
         await vm.ConnectWifiAsync();
-
         Assert.True(vm.ConnectSuccess);
         Assert.Null(vm.ConnectErrorMessage);
     }

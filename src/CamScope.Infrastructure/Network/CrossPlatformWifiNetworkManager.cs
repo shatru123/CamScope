@@ -12,6 +12,9 @@ public sealed class LinuxWifiNetworkManager : IWifiNetworkManager
     public bool IsPlatformSupported => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     public bool CanSupportConcurrentConnections => false;
 
+    public Task<SecondaryAdapterCapability> CheckSecondaryCapabilityAsync(string? targetInterfaceName, CancellationToken ct = default)
+        => Task.FromResult(SecondaryAdapterCapability.NotApplicable);
+
     public LinuxWifiNetworkManager(ILogger<LinuxWifiNetworkManager> logger)
     {
         _logger = logger;
@@ -50,6 +53,9 @@ public sealed class WindowsWifiNetworkManager : IWifiNetworkManager
     public bool IsPlatformSupported => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
     public bool CanSupportConcurrentConnections => false;
 
+    public Task<SecondaryAdapterCapability> CheckSecondaryCapabilityAsync(string? targetInterfaceName, CancellationToken ct = default)
+        => Task.FromResult(SecondaryAdapterCapability.NotApplicable);
+
     public WindowsWifiNetworkManager(ILogger<WindowsWifiNetworkManager> logger)
     {
         _logger = logger;
@@ -85,6 +91,9 @@ public sealed class UnsupportedPlatformWifiNetworkManager : IWifiNetworkManager
 {
     public bool IsPlatformSupported => false;
     public bool CanSupportConcurrentConnections => false;
+
+    public Task<SecondaryAdapterCapability> CheckSecondaryCapabilityAsync(string? targetInterfaceName, CancellationToken ct = default)
+        => Task.FromResult(SecondaryAdapterCapability.NotApplicable);
 
     public Task<IReadOnlyList<WifiNetworkInfo>> GetAvailableNetworksAsync(string? interfaceName = null, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<WifiNetworkInfo>>([]);

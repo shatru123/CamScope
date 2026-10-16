@@ -109,6 +109,7 @@ public interface IWifiNetworkManager
 {
     bool IsPlatformSupported { get; }
     bool CanSupportConcurrentConnections { get; }
+    Task<SecondaryAdapterCapability> CheckSecondaryCapabilityAsync(string? targetInterfaceName, CancellationToken ct = default);
     Task<IReadOnlyList<WifiNetworkInfo>> GetAvailableNetworksAsync(string? interfaceName = null, CancellationToken ct = default);
     Task<IReadOnlyList<WifiConnectionInfo>> GetCurrentConnectionsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<NetworkInterfaceInfo>> GetWifiInterfacesAsync(CancellationToken ct = default);
