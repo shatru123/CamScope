@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.Json;
+using Avalonia;
+using Avalonia.Threading;
 using CamScope.Core.Enums;
 using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
@@ -136,76 +138,92 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var scanResult = await _scanner.ScanAsync(_scanCts.Token).ConfigureAwait(false);
+            var scanResult = await _scanner.ScanAsync(_scanCts.Token);
 
             if (!scanResult.Succeeded)
             {
-                HasError = true;
-                ErrorMessage = scanResult.ErrorMessage ?? "Wi-Fi scan failed.";
-                ScanStatusMessage = "Scan terminated with errors.";
+                RunOnUI(() =>
+                {
+                    HasError = true;
+                    ErrorMessage = scanResult.ErrorMessage ?? "Wi-Fi scan failed.";
+                    ScanStatusMessage = "Scan terminated with errors.";
+                });
                 return;
             }
 
-            _allAccessPoints.Clear();
-            _allAccessPoints.AddRange(scanResult.Observations);
-
             // Execute passive findings analysis
-            _currentReport = _analyzer.Analyze(_allAccessPoints);
+            var report = _analyzer.Analyze(scanResult.Observations);
 
-            // Update dashboard metrics
-            TotalAccessPoints = _currentReport.TotalAccessPoints;
-            TotalOpenNetworks = _currentReport.TotalOpenNetworks;
-            TotalWpa3Networks = _currentReport.TotalWpa3Networks;
-            CriticalFindingsCount = _currentReport.CriticalFindingsCount;
-            HighFindingsCount = _currentReport.HighFindingsCount;
-            MediumFindingsCount = _currentReport.MediumFindingsCount;
-            OverallPostureBadgeText = _currentReport.PostureBadgeText;
-            OverallPostureBadgeColor = _currentReport.PostureBadgeColor;
-            PostureSummaryText = _currentReport.PostureSummary;
-            LastScanTimeText = _currentReport.ScannedAtUtc.ToLocalTime().ToString("g");
+            RunOnUI(() =>
+            {
+                _allAccessPoints.Clear();
+                _allAccessPoints.AddRange(scanResult.Observations);
+                _currentReport = report;
 
-            DuplicateSsidAnalyses.Clear();
-            foreach (var d in _currentReport.DuplicateSsidAnalyses) DuplicateSsidAnalyses.Add(d);
+                // Update dashboard metrics
+                TotalAccessPoints = report.TotalAccessPoints;
+                TotalOpenNetworks = report.TotalOpenNetworks;
+                TotalWpa3Networks = report.TotalWpa3Networks;
+                CriticalFindingsCount = report.CriticalFindingsCount;
+                HighFindingsCount = report.HighFindingsCount;
+                MediumFindingsCount = report.MediumFindingsCount;
+                OverallPostureBadgeText = report.PostureBadgeText;
+                OverallPostureBadgeColor = report.PostureBadgeColor;
+                PostureSummaryText = report.PostureSummary;
+                LastScanTimeText = report.ScannedAtUtc.ToLocalTime().ToString("g");
 
-            CongestionMetrics.Clear();
-            foreach (var c in _currentReport.ChannelCongestion) CongestionMetrics.Add(c);
+                DuplicateSsidAnalyses.Clear();
+                foreach (var d in report.DuplicateSsidAnalyses) DuplicateSsidAnalyses.Add(d);
 
-            ApplyFilterAndSort();
+                CongestionMetrics.Clear();
+                foreach (var c in report.ChannelCongestion) CongestionMetrics.Add(c);
 
-            ScanStatusMessage = $"Scan completed. Discovered {TotalAccessPoints} access point(s). Security posture: {OverallPostureBadgeText}.";
+                ApplyFilterAndSortInternal();
+
+                ScanStatusMessage = $"Scan completed. Discovered {TotalAccessPoints} access point(s). Security posture: {OverallPostureBadgeText}.";
+            });
 
             // Persist scan session metadata to SQLite (privacy-filtered: no sensitive data)
             var session = new WifiScanSession
             {
-                ScannedAtUtc = _currentReport.ScannedAtUtc,
-                TotalNetworksFound = TotalAccessPoints,
-                OverallPosture = _currentReport.OverallPosture,
-                ObservationsJson = JsonSerializer.Serialize(_allAccessPoints),
-                FindingsSummaryJson = JsonSerializer.Serialize(_currentReport.Findings)
+                ScannedAtUtc = report.ScannedAtUtc,
+                TotalNetworksFound = report.TotalAccessPoints,
+                OverallPosture = report.OverallPosture,
+                ObservationsJson = JsonSerializer.Serialize(scanResult.Observations),
+                FindingsSummaryJson = JsonSerializer.Serialize(report.Findings)
             };
-            await _repository.SaveScanSessionAsync(session).ConfigureAwait(false);
-            await LoadScanHistoryAsync().ConfigureAwait(false);
+            await _repository.SaveScanSessionAsync(session);
+            await LoadScanHistoryAsync();
 
             await _auditService.LogAsync(
                 AuditAction.WifiSecurityScanCompleted,
                 "LocalWifiAdapter",
                 succeeded: true,
-                $"Passive Wi-Fi security assessment completed. Discovered {TotalAccessPoints} access points, {_currentReport.Findings.Count} findings").ConfigureAwait(false);
+                $"Passive Wi-Fi security assessment completed. Discovered {report.TotalAccessPoints} access points, {report.Findings.Count} findings");
         }
         catch (OperationCanceledException)
         {
-            ScanStatusMessage = "Scan cancelled by operator.";
+            RunOnUI(() =>
+            {
+                ScanStatusMessage = "Scan cancelled by operator.";
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during Wi-Fi security scan");
-            HasError = true;
-            ErrorMessage = $"Error during Wi-Fi scan: {ex.Message}";
-            ScanStatusMessage = "Scan failed.";
+            RunOnUI(() =>
+            {
+                HasError = true;
+                ErrorMessage = $"Error during Wi-Fi scan: {ex.Message}";
+                ScanStatusMessage = "Scan failed.";
+            });
         }
         finally
         {
-            IsScanning = false;
+            RunOnUI(() =>
+            {
+                IsScanning = false;
+            });
         }
     }
 
@@ -223,6 +241,11 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
     partial void OnSelectedSortOptionChanged(string value) => ApplyFilterAndSort();
 
     public void ApplyFilterAndSort()
+    {
+        RunOnUI(ApplyFilterAndSortInternal);
+    }
+
+    private void ApplyFilterAndSortInternal()
     {
         var query = _allAccessPoints.AsEnumerable();
 
@@ -277,27 +300,30 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedAccessPointChanged(WifiAccessPointObservation? value)
     {
-        if (value == null)
+        RunOnUI(() =>
         {
-            IsDetailDrawerOpen = false;
-            SelectedApFindings.Clear();
-            return;
-        }
-
-        SelectedApFindings.Clear();
-        if (_currentReport != null)
-        {
-            var matchingFindings = _currentReport.Findings
-                .Where(f => f.AccessPointId == value.Id || (!string.IsNullOrEmpty(value.Ssid) && f.Ssid.Equals(value.Ssid, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-
-            foreach (var f in matchingFindings)
+            if (value == null)
             {
-                SelectedApFindings.Add(f);
+                IsDetailDrawerOpen = false;
+                SelectedApFindings.Clear();
+                return;
             }
-        }
 
-        IsDetailDrawerOpen = true;
+            SelectedApFindings.Clear();
+            if (_currentReport != null)
+            {
+                var matchingFindings = _currentReport.Findings
+                    .Where(f => f.AccessPointId == value.Id || (!string.IsNullOrEmpty(value.Ssid) && f.Ssid.Equals(value.Ssid, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+
+                foreach (var f in matchingFindings)
+                {
+                    SelectedApFindings.Add(f);
+                }
+            }
+
+            IsDetailDrawerOpen = true;
+        });
     }
 
     [RelayCommand]
@@ -514,9 +540,12 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            var history = await _repository.GetScanHistoryAsync(20).ConfigureAwait(false);
-            ScanHistory.Clear();
-            foreach (var item in history) ScanHistory.Add(item);
+            var history = await _repository.GetScanHistoryAsync(20);
+            RunOnUI(() =>
+            {
+                ScanHistory.Clear();
+                foreach (var item in history) ScanHistory.Add(item);
+            });
         }
         catch (Exception ex)
         {
@@ -529,13 +558,43 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            await _repository.ClearScanHistoryAsync().ConfigureAwait(false);
-            ScanHistory.Clear();
-            ScanStatusMessage = "Scan history cleared.";
+            await _repository.ClearScanHistoryAsync();
+            RunOnUI(() =>
+            {
+                ScanHistory.Clear();
+                ScanStatusMessage = "Scan history cleared.";
+            });
         }
         catch (Exception ex)
         {
-            ExportFeedback = $"Failed to clear history: {ex.Message}";
+            RunOnUI(() =>
+            {
+                ExportFeedback = $"Failed to clear history: {ex.Message}";
+            });
+        }
+    }
+
+    private void RunOnUI(Action action)
+    {
+        if (Avalonia.Application.Current == null || Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(action);
+        }
+    }
+
+    private async Task RunOnUIAsync(Action action)
+    {
+        if (Avalonia.Application.Current == null || Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            await Dispatcher.UIThread.InvokeAsync(action);
         }
     }
 
