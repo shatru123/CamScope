@@ -81,7 +81,14 @@ public enum AuditAction
     WifiSecurityScanCompleted,
     WifiSecurityAssessmentRun,
     WifiAuditRecordSaved,
-    WifiAuditRecordDeleted
+    WifiAuditRecordDeleted,
+    AdminAuthAttemptSucceeded,
+    AdminAuthAttemptFailed,
+    AdminAuthThrottled,
+    AdminAccountLocked,
+    AdminAccountUnlocked,
+    PasswordPolicyAudited,
+    PassphraseGenerated
 }
 
 public enum ThemeMode

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Threading;
+using CamScope.Application.Security;
 using CamScope.Core.Enums;
 using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
@@ -68,10 +69,27 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _auditNotes = string.Empty;
     [ObservableProperty] private bool _isRouterVerified;
 
-    // Password Strength Estimator Tool Modal (Zero retention)
+    // Password Strength Estimator & NIST SP 800-63B Tool Modal (Zero retention)
     [ObservableProperty] private bool _isPasswordModalOpen;
     [ObservableProperty] private string _candidatePasswordInput = string.Empty;
     [ObservableProperty] private PasswordStrengthEstimate? _passwordEstimate;
+    [ObservableProperty] private NistPasswordAuditResult? _nistAuditResult;
+    [ObservableProperty] private bool _isPrivilegedAdminMode;
+    [ObservableProperty] private bool _showUnmaskedPassword;
+    [ObservableProperty] private string _generatedPassphrase = string.Empty;
+    [ObservableProperty] private string _nistContextUsername = "admin";
+    [ObservableProperty] private string _nistContextEntityName = "CamScope";
+    [ObservableProperty] private int _selectedPassphraseWordCount = 4;
+
+    // Administrative Authentication Controls & Simulation
+    [ObservableProperty] private string _adminLoginUsername = "admin";
+    [ObservableProperty] private string _adminLoginPassword = string.Empty;
+    [ObservableProperty] private string _adminAuthStatusMessage = "Ready to verify NIST SP 800-63B administrative controls.";
+    [ObservableProperty] private string _adminAuthBadgeColor = "#3B82F6";
+    [ObservableProperty] private bool _isAdminLockedOut;
+    [ObservableProperty] private int _adminRemainingAttempts = 5;
+    [ObservableProperty] private int _throttleDelaySeconds;
+    [ObservableProperty] private bool _isAuthenticatingAdmin;
 
     // Collections
     public ObservableCollection<WifiAccessPointObservation> FilteredAccessPoints { get; } = [];
@@ -81,6 +99,9 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
     public ObservableCollection<WifiScanSession> ScanHistory { get; } = [];
     public ObservableCollection<AuditChecklistItem> AuditChecklistItems { get; } = [];
 
+    private readonly INistPasswordAuditor _nistAuditor;
+    private readonly IAdminAuthenticationController _adminAuthController;
+
     public WifiSecurityViewModel(
         IWifiSecurityScanner scanner,
         IWifiSecurityAnalyzer analyzer,
@@ -88,7 +109,9 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
         IWifiSecurityRepository repository,
         IAuditService auditService,
         ISettingsService settingsService,
-        ILogger<WifiSecurityViewModel> logger)
+        ILogger<WifiSecurityViewModel> logger,
+        INistPasswordAuditor? nistAuditor = null,
+        IAdminAuthenticationController? adminAuthController = null)
     {
         _scanner = scanner;
         _analyzer = analyzer;
@@ -97,6 +120,8 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
         _auditService = auditService;
         _settingsService = settingsService;
         _logger = logger;
+        _nistAuditor = nistAuditor ?? new NistPasswordAuditor();
+        _adminAuthController = adminAuthController ?? new AdminAuthenticationController(auditService, Microsoft.Extensions.Logging.Abstractions.NullLogger<AdminAuthenticationController>.Instance);
 
         _ = InitializeAsync();
     }
@@ -439,19 +464,34 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
         ScanStatusMessage = $"Saved defensive audit verification for '{AuditTargetSsid}'.";
     }
 
-    // --- Local Password Strength Tool (Zero Retention) ---
+    // --- NIST SP 800-63B Password Auditor & Administrative Authentication Controls (Zero Retention) ---
 
     [RelayCommand]
     public void OpenPasswordModal()
     {
         CandidatePasswordInput = string.Empty;
-        PasswordEstimate = _passwordEstimator.Estimate(string.Empty);
+        GeneratedPassphrase = string.Empty;
+        ShowUnmaskedPassword = false;
+        ReevaluatePassword();
         IsPasswordModalOpen = true;
     }
 
-    partial void OnCandidatePasswordInputChanged(string value)
+    partial void OnCandidatePasswordInputChanged(string value) => ReevaluatePassword();
+    partial void OnIsPrivilegedAdminModeChanged(bool value) => ReevaluatePassword();
+    partial void OnNistContextUsernameChanged(string value) => ReevaluatePassword();
+    partial void OnNistContextEntityNameChanged(string value) => ReevaluatePassword();
+
+    private void ReevaluatePassword()
     {
-        PasswordEstimate = _passwordEstimator.Estimate(value);
+        RunOnUI(() =>
+        {
+            PasswordEstimate = _passwordEstimator.Estimate(CandidatePasswordInput);
+            NistAuditResult = _nistAuditor.AuditPassword(
+                CandidatePasswordInput,
+                IsPrivilegedAdminMode,
+                NistContextUsername,
+                NistContextEntityName);
+        });
     }
 
     [RelayCommand]
@@ -459,8 +499,81 @@ public sealed partial class WifiSecurityViewModel : ViewModelBase, IDisposable
     {
         // Zero-retention guarantee: immediately clear candidate memory
         CandidatePasswordInput = string.Empty;
+        GeneratedPassphrase = string.Empty;
         PasswordEstimate = null;
+        NistAuditResult = null;
         IsPasswordModalOpen = false;
+    }
+
+    [RelayCommand]
+    public void GenerateCompliantPassphrase()
+    {
+        var passphrase = _nistAuditor.GenerateCompliantPassphrase(SelectedPassphraseWordCount, "-");
+        GeneratedPassphrase = passphrase;
+        CandidatePasswordInput = passphrase;
+        ShowUnmaskedPassword = true;
+        ReevaluatePassword();
+
+        _ = _auditService.LogAsync(
+            AuditAction.PassphraseGenerated,
+            "LocalOperator",
+            succeeded: true,
+            $"Generated NIST SP 800-63B compliant passphrase ({SelectedPassphraseWordCount} words, {NistAuditResult?.EntropyBits ?? 0:F1} bits entropy).");
+    }
+
+    [RelayCommand]
+    public void TogglePasswordMask()
+    {
+        ShowUnmaskedPassword = !ShowUnmaskedPassword;
+    }
+
+    [RelayCommand]
+    public async Task SimulateAdminLoginAsync()
+    {
+        if (IsAuthenticatingAdmin) return;
+        IsAuthenticatingAdmin = true;
+
+        try
+        {
+            var result = await _adminAuthController.AuthenticateAsync(AdminLoginUsername, AdminLoginPassword);
+            RunOnUI(() =>
+            {
+                IsAdminLockedOut = result.IsLockedOut;
+                AdminRemainingAttempts = result.RemainingAttemptsBeforeLockout;
+                ThrottleDelaySeconds = result.ThrottleDelayMs / 1000;
+                AdminAuthStatusMessage = result.Message;
+                AdminAuthBadgeColor = result.Success ? "#10B981" : (result.IsLockedOut ? "#EF4444" : "#F59E0B");
+            });
+        }
+        catch (Exception ex)
+        {
+            RunOnUI(() =>
+            {
+                AdminAuthStatusMessage = $"Authentication error: {ex.Message}";
+                AdminAuthBadgeColor = "#EF4444";
+            });
+        }
+        finally
+        {
+            RunOnUI(() =>
+            {
+                IsAuthenticatingAdmin = false;
+            });
+        }
+    }
+
+    [RelayCommand]
+    public async Task ResetAdminLockoutAsync()
+    {
+        await _adminAuthController.ResetLockoutAsync(AdminLoginUsername);
+        RunOnUI(() =>
+        {
+            IsAdminLockedOut = false;
+            AdminRemainingAttempts = 5;
+            ThrottleDelaySeconds = 0;
+            AdminAuthStatusMessage = $"Administrative lockout cleared for '{AdminLoginUsername}'.";
+            AdminAuthBadgeColor = "#10B981";
+        });
     }
 
     // --- Export Commands ---

@@ -158,3 +158,27 @@ public interface IWifiSecurityRepository
     Task<IReadOnlyList<AuthorizedAuditRecord>> GetAuditRecordsAsync(string? ssid = null, CancellationToken ct = default);
     Task DeleteAuditRecordAsync(string id, CancellationToken ct = default);
 }
+
+public interface INistPasswordAuditor
+{
+    NistPasswordAuditResult AuditPassword(
+        string password,
+        bool isPrivilegedAdmin = false,
+        string? contextUsername = null,
+        string? contextEntityName = null);
+
+    string GenerateCompliantPassphrase(int wordCount = 4, string separator = "-");
+}
+
+public interface IAdminAuthenticationController
+{
+    Task<AdminAuthAttemptResult> AuthenticateAsync(
+        string username,
+        string candidatePassword,
+        string clientIp = "127.0.0.1",
+        CancellationToken ct = default);
+
+    Task<bool> SetPasswordAsync(string username, string newPassword, CancellationToken ct = default);
+    Task ResetLockoutAsync(string username, CancellationToken ct = default);
+    AdminAccountState GetAccountState(string username);
+}

@@ -80,6 +80,8 @@ public partial class App : Avalonia.Application
         services.AddSingleton<ICredentialStore, SecureCredentialStore>();
         services.AddSingleton<IWifiSecurityAnalyzer, WifiSecurityAnalyzer>();
         services.AddSingleton<IPasswordStrengthEstimator, PasswordStrengthEstimator>();
+        services.AddSingleton<INistPasswordAuditor, NistPasswordAuditor>();
+        services.AddSingleton<IAdminAuthenticationController, AdminAuthenticationController>();
 
         // Wi-Fi Network Manager
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))

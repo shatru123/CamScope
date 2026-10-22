@@ -25,7 +25,7 @@
                     Command="{Binding StopScanCommand}"
                     IsVisible="{Binding IsScanning}"
                     Classes="danger"/>
-            <Button Content="Password Strength Tool"
+            <Button Content="NIST SP 800-63B Auth Auditor"
                     Command="{Binding OpenPasswordModalCommand}"
                     Classes="secondary"/>
             <Button Content="Export JSON"
@@ -442,9 +442,9 @@
       </Border>
     </Border>
 
-    <!-- MODAL 2: Local Password Strength Tool Modal (Zero Retention Guarantee) -->
+    <!-- MODAL 2: NIST SP 800-63B Password Auditor & Administrative Authentication Controls (Zero Retention) -->
     <Border Background="#D0000000" IsVisible="{Binding IsPasswordModalOpen}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
-      <Border Classes="card" Background="#111827" Width="600" MaxHeight="600"
+      <Border Classes="card" Background="#111827" Width="740" MaxHeight="720"
               BorderBrush="{StaticResource CyanAccent}" BorderThickness="1"
               HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20">
         <Grid RowDefinitions="Auto, *, Auto">
@@ -452,8 +452,8 @@
           <!-- Header -->
           <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,14">
             <StackPanel Grid.Column="0">
-              <TextBlock Text="Local Password Strength &amp; Offline Crack Time Estimator" FontSize="15" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
-              <TextBlock Text="Zero-Retention Guarantee: Passphrases evaluated in memory only. Never logged or saved." FontSize="11" Foreground="{StaticResource TextMuted}"/>
+              <TextBlock Text="NIST SP 800-63B Authentication &amp; Password Policy Auditor" FontSize="15" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="Digital Identity Guidelines: Memorized Secrets (§ 5.1.1.2), Verifier Throttling (§ 5.2.2) &amp; Lifecycle Controls (§ 7.1)" FontSize="11" Foreground="{StaticResource TextMuted}"/>
             </StackPanel>
             <Button Grid.Column="1" Content="✕" Command="{Binding ClosePasswordModalCommand}" Classes="secondary" Padding="8,4"/>
           </Grid>
@@ -462,51 +462,177 @@
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="14">
 
-              <!-- Input Box -->
-              <StackPanel Spacing="4">
-                <TextBlock Text="Candidate Wi-Fi Passphrase:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
-                <TextBox Text="{Binding CandidatePasswordInput}" Watermark="Type candidate Wi-Fi passphrase to evaluate strength..."
-                         PasswordChar="•"/>
-              </StackPanel>
+              <!-- Account Tier & Mode Configuration -->
+              <Border Classes="card" Background="#162032" Padding="12">
+                <Grid ColumnDefinitions="*, Auto" RowDefinitions="Auto, Auto">
+                  <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                    <TextBlock Text="ACCOUNT ASSURANCE LEVEL" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                    <CheckBox Content="Privileged Administrative Account (Mandates ≥ 14 characters per NIST guidelines)"
+                              IsChecked="{Binding IsPrivilegedAdminMode}"
+                              Foreground="{StaticResource TextPrimary}"/>
+                  </StackPanel>
 
-              <!-- Estimation Results Card -->
-              <Border Classes="card" Background="#162032" Padding="14">
-                <Grid RowDefinitions="Auto, Auto, Auto, Auto" ColumnDefinitions="*, Auto">
-                  <TextBlock Grid.Row="0" Grid.Column="0" Text="STRENGTH RATING" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
-                  <Border Grid.Row="0" Grid.Column="1" Background="{Binding PasswordEstimate.BadgeColor}" CornerRadius="4" Padding="8,2">
-                    <TextBlock Text="{Binding PasswordEstimate.Rating}" FontSize="11" FontWeight="Bold" Foreground="White"/>
-                  </Border>
+                  <Button Grid.Row="0" Grid.Column="1"
+                          Content="🎲 Generate NIST Passphrase"
+                          Command="{Binding GenerateCompliantPassphraseCommand}"
+                          Classes="primary"
+                          VerticalAlignment="Center"/>
 
-                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Information Entropy:" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,10,0,2"/>
-                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PasswordEstimate.EntropyBits, StringFormat='{}{0:F1} bits'}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource CyanAccent}" Margin="0,10,0,2"/>
-
-                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Offline GPU Crack Time (100M H/s):" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,2"/>
-                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PasswordEstimate.EstimatedCrackTimeOfflineGpu}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,4,0,2"/>
-
-                  <TextBlock Grid.Row="3" Grid.Column="0" Text="Offline CPU Crack Time (100k H/s):" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,2"/>
-                  <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PasswordEstimate.EstimatedCrackTimeOfflineCpu}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,4,0,2"/>
+                  <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*, *" Margin="0,10,0,0">
+                    <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,8,0">
+                      <TextBlock Text="Context Username:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBox Text="{Binding NistContextUsername}" Watermark="e.g. admin" Height="30"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,0,0">
+                      <TextBlock Text="Context Entity / SSID / Camera Name:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBox Text="{Binding NistContextEntityName}" Watermark="e.g. CamScope" Height="30"/>
+                    </StackPanel>
+                  </Grid>
                 </Grid>
               </Border>
 
-              <!-- Actionable Recommendations -->
-              <TextBlock Text="Security Hardening Suggestions" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+              <!-- Secret Input with Show/Unmask Option (NIST § 5.1.1.2 Usability Mandate) -->
+              <StackPanel Spacing="4">
+                <Grid ColumnDefinitions="*, Auto">
+                  <TextBlock Grid.Column="0" Text="Candidate Passphrase / Memorized Secret:" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                  <Button Grid.Column="1"
+                          Content="{Binding ShowUnmaskedPassword, Converter={x:Null}, StringFormat='{}'}"
+                          Command="{Binding TogglePasswordMaskCommand}"
+                          Classes="secondary"
+                          Padding="6,2"
+                          FontSize="10">
+                    <TextBlock Text="{Binding ShowUnmaskedPassword, Converter={x:Null}, StringFormat='{}'}" IsVisible="False"/>
+                  </Button>
+                </Grid>
 
-              <ItemsControl ItemsSource="{Binding PasswordEstimate.Suggestions}">
+                <Grid ColumnDefinitions="*, Auto">
+                  <TextBox Grid.Column="0"
+                           Text="{Binding CandidatePasswordInput}"
+                           Watermark="Type secret or click 'Generate NIST Passphrase' above..."
+                           PasswordChar="•"
+                           IsVisible="{Binding !ShowUnmaskedPassword}"/>
+                  <TextBox Grid.Column="0"
+                           Text="{Binding CandidatePasswordInput}"
+                           Watermark="Type secret or click 'Generate NIST Passphrase' above..."
+                           IsVisible="{Binding ShowUnmaskedPassword}"/>
+                  <Button Grid.Column="1"
+                          Content="👁 Show / Hide"
+                          Command="{Binding TogglePasswordMaskCommand}"
+                          Classes="secondary"
+                          Margin="6,0,0,0"/>
+                </Grid>
+                <TextBlock Text="Zero-Retention Guarantee: Evaluated purely in ephemeral stack memory. Never persisted or transmitted." FontSize="10" Foreground="{StaticResource TextMuted}"/>
+              </StackPanel>
+
+              <!-- Overall NIST Compliance Status Card -->
+              <Border Classes="card" Background="#162032" Padding="14">
+                <Grid RowDefinitions="Auto, Auto, Auto" ColumnDefinitions="*, Auto">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="NIST SP 800-63B COMPLIANCE POSTURE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}"/>
+                  <Border Grid.Row="0" Grid.Column="1" Background="{Binding NistAuditResult.BadgeColor}" CornerRadius="4" Padding="8,2">
+                    <TextBlock Text="{Binding NistAuditResult.ComplianceBadgeText}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                  </Border>
+
+                  <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*, *, *" Margin="0,10,0,6">
+                    <StackPanel Grid.Column="0">
+                      <TextBlock Text="Length:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBlock Text="{Binding NistAuditResult.PasswordLength, StringFormat='{}{0} characters'}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="Information Entropy:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBlock Text="{Binding NistAuditResult.EntropyBits, StringFormat='{}{0:F1} bits'}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                      <TextBlock Text="Offline GPU Crack Time:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBlock Text="{Binding PasswordEstimate.EstimatedCrackTimeOfflineGpu}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                    </StackPanel>
+                  </Grid>
+
+                  <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding NistAuditResult.Summary}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                </Grid>
+              </Border>
+
+              <!-- Detailed NIST SP 800-63B Rule Breakdown -->
+              <TextBlock Text="NIST SP 800-63B Section 5.1.1.2 Rule Audit" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+
+              <ItemsControl ItemsSource="{Binding NistAuditResult.Rules}">
                 <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Classes="card" Margin="0,0,0,4" Background="#1B2436" Padding="8">
-                      <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                  <DataTemplate DataType="models:NistRuleEvaluation">
+                    <Border Classes="card" Margin="0,0,0,6" Background="#1A2333" Padding="10">
+                      <Grid ColumnDefinitions="Auto, *, Auto">
+                        <Border Grid.Column="0" Width="24" Height="24" CornerRadius="12"
+                                Background="{Binding BadgeColor}"
+                                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,0,10,0">
+                          <TextBlock Text="{Binding StatusIcon}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     FontSize="12" FontWeight="Bold" Foreground="White"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Spacing="2">
+                          <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding RuleName}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding NistSection}" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                          </Grid>
+                          <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding Guidance, StringFormat='{}Guideline: {0}'}" FontSize="10" Foreground="{StaticResource CyanAccent}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </Grid>
                     </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+
+              <!-- NIST SP 800-63B § 5.2.2 Administrative Authentication Controls & Throttling Simulator -->
+              <Border Classes="card" Background="#162032" BorderBrush="{StaticResource CyanAccent}" BorderThickness="1" Padding="14">
+                <StackPanel Spacing="10">
+                  <Grid ColumnDefinitions="*, Auto">
+                    <StackPanel Grid.Column="0">
+                      <TextBlock Text="NIST SP 800-63B § 5.2.2 ADMINISTRATIVE AUTHENTICATION CONTROLS" FontSize="11" FontWeight="Bold" Foreground="{StaticResource CyanAccent}"/>
+                      <TextBlock Text="Salted PBKDF2-HMAC-SHA256 (600,000 iterations), constant-time comparison, and adaptive throttling" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <Border Grid.Column="1" Background="{Binding AdminAuthBadgeColor}" CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding IsAdminLockedOut, Converter={x:Null}, StringFormat='{}'}" IsVisible="False"/>
+                    </Border>
+                  </Grid>
+
+                  <Grid ColumnDefinitions="*, *, Auto" RowDefinitions="Auto, Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2" Margin="0,0,6,0">
+                      <TextBlock Text="Username:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBox Text="{Binding AdminLoginUsername}" Height="30"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" Margin="6,0,6,0">
+                      <TextBlock Text="Test Candidate Password:" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                      <TextBox Text="{Binding AdminLoginPassword}" PasswordChar="•" Height="30"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2" VerticalAlignment="Bottom" Orientation="Horizontal" Spacing="6">
+                      <Button Content="Verify Auth"
+                              Command="{Binding SimulateAdminLoginCommand}"
+                              IsEnabled="{Binding !IsAuthenticatingAdmin}"
+                              Classes="primary"/>
+                      <Button Content="Reset Lockout"
+                              Command="{Binding ResetAdminLockoutCommand}"
+                              IsEnabled="{Binding IsAdminLockedOut}"
+                              Classes="secondary"/>
+                    </StackPanel>
+                  </Grid>
+
+                  <!-- Live Feedback Box -->
+                  <Border Background="#0F172A" CornerRadius="4" Padding="10">
+                    <Grid ColumnDefinitions="*, Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding AdminAuthStatusMessage}" FontSize="11" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{Binding AdminRemainingAttempts, StringFormat='{}Remaining: {0}'}" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                        <TextBlock Text="{Binding ThrottleDelaySeconds, StringFormat='{}Backoff: {0}s'}" FontSize="10" Foreground="{StaticResource AmberWarning}"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </Border>
 
             </StackPanel>
           </ScrollViewer>
 
           <!-- Footer -->
           <Grid Grid.Row="2" Margin="0,14,0,0">
-            <Button Content="Close Tool" Command="{Binding ClosePasswordModalCommand}" Classes="secondary" HorizontalAlignment="Right"/>
+            <Button Content="Close Auditor" Command="{Binding ClosePasswordModalCommand}" Classes="secondary" HorizontalAlignment="Right"/>
           </Grid>
 
         </Grid>
