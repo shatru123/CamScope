@@ -40,6 +40,8 @@ public interface IAuditService
 public interface INetworkInterfaceProvider
 {
     IReadOnlyList<NetworkInterfaceInfo> GetEligibleInterfaces(bool includeLoopback = false);
+    IReadOnlyList<NetworkInterfaceInfo> GetAllInterfaces();
+    event Action? InterfacesChanged;
 }
 
 public interface IStreamingSession : IAsyncDisposable
@@ -92,6 +94,7 @@ public record DeviceInformationResult(
 public interface IOnvifClient
 {
     Task<bool> ProbeReachableAsync(string serviceAddress, TimeSpan timeout, CancellationToken ct = default);
+    Task<CameraConnectionTestResult> TestConnectionAsync(string serviceAddress, TimeSpan timeout, CancellationToken ct = default);
     Task<DeviceInformationResult> GetDeviceInformationAsync(string serviceAddress, string? username, string? password, CancellationToken ct = default);
     Task<DeviceCapabilities> GetCapabilitiesAsync(string serviceAddress, string? username, string? password, CancellationToken ct = default);
     Task<string?> GetStreamUriAsync(string serviceAddress, string? username, string? password, CancellationToken ct = default);

@@ -8,6 +8,9 @@ using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
 using Microsoft.Extensions.Logging;
 
+using System.Runtime.InteropServices;
+using CamScope.Core.Enums;
+
 namespace CamScope.Infrastructure.Network;
 
 public sealed class NetworkInterfaceProvider : INetworkInterfaceProvider
@@ -15,17 +18,59 @@ public sealed class NetworkInterfaceProvider : INetworkInterfaceProvider
     private readonly ILogger<NetworkInterfaceProvider> _logger;
     private readonly TimeSpan _processTimeout;
 
+    public event Action? InterfacesChanged;
+
     public NetworkInterfaceProvider(
         ILogger<NetworkInterfaceProvider> logger,
         TimeSpan? processTimeout = null)
     {
         _logger = logger;
         _processTimeout = processTimeout ?? TimeSpan.FromSeconds(2);
+
+        try
+        {
+            NetworkChange.NetworkAddressChanged += (_, _) => OnNetworkStateChanged();
+            NetworkChange.NetworkAvailabilityChanged += (_, _) => OnNetworkStateChanged();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to register system NetworkChange event handlers");
+        }
     }
 
-    public IReadOnlyList<NetworkInterfaceInfo> GetEligibleInterfaces(bool includeLoopback = false)
+    private void OnNetworkStateChanged()
+    {
+        _logger.LogInformation("Host network configuration change detected. Notifying interface listeners.");
+        try
+        {
+            InterfacesChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error invoking InterfacesChanged handler");
+        }
+    }
+
+    public IReadOnlyList<NetworkInterfaceInfo> GetAllInterfaces()
     {
         var result = new List<NetworkInterfaceInfo>();
+
+        var hwPorts = new Dictionary<string, (string Port, string Mac)>(StringComparer.OrdinalIgnoreCase);
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            try
+            {
+                var hwOutput = RunNetworkSetupHardwarePortsWithTimeout(_processTimeout);
+                if (!string.IsNullOrWhiteSpace(hwOutput))
+                {
+                    hwPorts = NetworkInventoryService.ParseHardwarePortsOutput(hwOutput);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to query macOS networksetup hardware ports");
+            }
+        }
 
         try
         {
@@ -33,36 +78,70 @@ public sealed class NetworkInterfaceProvider : INetworkInterfaceProvider
 
             foreach (var iface in allInterfaces)
             {
-                if (iface.OperationalStatus != OperationalStatus.Up)
-                    continue;
-
                 var ipProps = iface.GetIPProperties();
                 var ipv4Info = ipProps.UnicastAddresses
                     .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork);
+                var ipv6Info = ipProps.UnicastAddresses
+                    .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetworkV6);
 
-                if (ipv4Info == null)
-                    continue;
-
-                var ipStr = ipv4Info.Address.ToString();
+                var ipStr = ipv4Info?.Address.ToString() ?? string.Empty;
+                var netmask = ipv4Info?.IPv4Mask?.ToString() ?? "255.255.255.0";
                 var isLoopback = iface.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
                                  ipStr.StartsWith("127.", StringComparison.Ordinal);
 
-                if (!includeLoopback && isLoopback)
-                    continue;
+                hwPorts.TryGetValue(iface.Name, out var hwInfo);
+                var portName = !string.IsNullOrEmpty(hwInfo.Port) ? hwInfo.Port : iface.Description;
+                var macAddress = !string.IsNullOrEmpty(hwInfo.Mac)
+                    ? hwInfo.Mac
+                    : NetworkInventoryService.FormatMacAddress(iface.GetPhysicalAddress().GetAddressBytes());
 
-                var supportsMulticast = iface.SupportsMulticast;
+                var kind = NetworkInventoryService.ClassifyInterfaceKind(
+                    iface.Name, portName, iface.Description, iface.NetworkInterfaceType, isLoopback);
+
+                string? gateway = null;
+                var gwAddr = ipProps.GatewayAddresses.FirstOrDefault()?.Address;
+                if (gwAddr != null && !gwAddr.Equals(IPAddress.Any) && !gwAddr.Equals(IPAddress.None))
+                {
+                    gateway = gwAddr.ToString();
+                }
+
+                bool isUp = iface.OperationalStatus == OperationalStatus.Up;
+
+                string? unusableReason = null;
+                if (!isUp)
+                {
+                    unusableReason = "Interface link is down or cable unplugged";
+                }
+                else if (string.IsNullOrEmpty(ipStr))
+                {
+                    unusableReason = "No IPv4 address assigned (DHCP pending or static IP unconfigured)";
+                }
+                else if (isLoopback)
+                {
+                    unusableReason = "Loopback diagnostic adapter only";
+                }
+                else if (kind == NetworkInterfaceKind.Virtual || kind == NetworkInterfaceKind.Vpn)
+                {
+                    unusableReason = "Virtual or VPN tunnel interface";
+                }
 
                 result.Add(new NetworkInterfaceInfo
                 {
                     Id = iface.Id,
                     Name = iface.Name,
                     Description = isLoopback ? $"{iface.Description} (Diagnostic / Loopback)" : iface.Description,
+                    HardwarePort = portName,
                     IPv4Address = ipStr,
-                    SubnetMask = ipv4Info.IPv4Mask?.ToString() ?? "255.255.255.0",
-                    IsUp = true,
+                    SubnetMask = netmask,
+                    GatewayAddress = gateway,
+                    IPv6Address = ipv6Info?.Address.ToString(),
+                    MacAddress = macAddress,
+                    IsUp = isUp,
                     IsLoopback = isLoopback,
-                    SupportsMulticast = supportsMulticast,
-                    SpeedBytesPerSec = iface.Speed
+                    SupportsMulticast = iface.SupportsMulticast,
+                    InterfaceKind = kind,
+                    SpeedBytesPerSec = iface.Speed,
+                    UnusableReason = unusableReason
                 });
             }
         }
@@ -73,29 +152,83 @@ public sealed class NetworkInterfaceProvider : INetworkInterfaceProvider
 
         if (result.Count == 0)
         {
-            TryEnumerateViaIfconfig(result, includeLoopback);
+            TryEnumerateViaIfconfig(result, includeLoopback: true);
         }
 
-        if (result.Count == 0 && includeLoopback)
-        {
-            result.Add(new NetworkInterfaceInfo
-            {
-                Id = "lo0",
-                Name = "lo0",
-                Description = "Default Local Loopback Adapter (Diagnostic)",
-                IPv4Address = "127.0.0.1",
-                SubnetMask = "255.0.0.0",
-                IsUp = true,
-                IsLoopback = true,
-                SupportsMulticast = true
-            });
-        }
-
-        // Sort: physical interfaces first, loopback last
         return result
-            .OrderBy(i => i.IsLoopback)
+            .OrderBy(i => !i.IsUsable)
+            .ThenBy(i => i.IsLoopback)
             .ThenBy(i => i.Name)
             .ToList();
+    }
+
+    public IReadOnlyList<NetworkInterfaceInfo> GetEligibleInterfaces(bool includeLoopback = false)
+    {
+        var all = GetAllInterfaces();
+        var eligible = all.Where(i =>
+        {
+            if (i.IsLoopback) return includeLoopback;
+            return i.IsUsable;
+        }).ToList();
+
+        if (eligible.Count == 0 && includeLoopback)
+        {
+            var loopback = all.FirstOrDefault(i => i.IsLoopback);
+            if (loopback != null)
+            {
+                eligible.Add(loopback);
+            }
+            else
+            {
+                eligible.Add(new NetworkInterfaceInfo
+                {
+                    Id = "lo0",
+                    Name = "lo0",
+                    Description = "Default Local Loopback Adapter (Diagnostic)",
+                    IPv4Address = "127.0.0.1",
+                    SubnetMask = "255.0.0.0",
+                    IsUp = true,
+                    IsLoopback = true,
+                    SupportsMulticast = true
+                });
+            }
+        }
+
+        return eligible;
+    }
+
+    private string? RunNetworkSetupHardwarePortsWithTimeout(TimeSpan timeout)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "/usr/sbin/networksetup",
+                Arguments = "-listallhardwareports",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = new Process { StartInfo = psi };
+            if (!process.Start()) return null;
+
+            using var cts = new CancellationTokenSource(timeout);
+            var readTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+            if (readTask.Wait(timeout))
+            {
+                process.WaitForExit(500);
+                return readTask.Result;
+            }
+
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void TryEnumerateViaIfconfig(List<NetworkInterfaceInfo> list, bool includeLoopback)

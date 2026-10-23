@@ -101,4 +101,34 @@ en9: flags=8862<BROADCAST,SMART,RUNNING> mtu 1500
 
         Assert.NotEmpty(ifaces);
     }
+
+    [Fact]
+    public void GetAllInterfaces_ReturnsAllAdaptersWithUsabilityClassification()
+    {
+        var provider = new NetworkInterfaceProvider(NullLogger<NetworkInterfaceProvider>.Instance);
+        var all = provider.GetAllInterfaces();
+
+        Assert.NotNull(all);
+        foreach (var iface in all)
+        {
+            Assert.NotNull(iface.Name);
+            if (!iface.IsUsable)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(iface.UnusableReason));
+            }
+        }
+    }
+
+    [Fact]
+    public void InterfacesChanged_EventCanBeRegisteredAndDisposedSafely()
+    {
+        var provider = new NetworkInterfaceProvider(NullLogger<NetworkInterfaceProvider>.Instance);
+        bool called = false;
+        Action handler = () => called = true;
+
+        provider.InterfacesChanged += handler;
+        provider.InterfacesChanged -= handler;
+
+        Assert.False(called);
+    }
 }

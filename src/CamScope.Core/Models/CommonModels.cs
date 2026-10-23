@@ -21,9 +21,47 @@ public sealed class NetworkInterfaceInfo
     public long SpeedBytesPerSec { get; set; }
     public int InterfaceIndex { get; set; }
 
-    public string DisplayText => string.IsNullOrWhiteSpace(HardwarePort) || HardwarePort == Description
-        ? $"{Name} - {IPv4Address} ({Description}){(IsPrimaryInternet ? " [PRIMARY]" : "")}"
-        : $"{Name} [{HardwarePort}] - {IPv4Address}{(IsPrimaryInternet ? " [PRIMARY]" : "")}";
+    public string? UnusableReason { get; set; }
+    public bool IsUsable => IsUp && !string.IsNullOrWhiteSpace(IPv4Address) && IPv4Address != "0.0.0.0" && string.IsNullOrEmpty(UnusableReason);
+
+    public string DisplayText
+    {
+        get
+        {
+            if (!IsUsable)
+            {
+                var reason = !string.IsNullOrEmpty(UnusableReason) ? UnusableReason : (IsUp ? "No IPv4 Address" : "Link Down / Unplugged");
+                return $"{Name} - [{reason}] ({Description})";
+            }
+
+            return string.IsNullOrWhiteSpace(HardwarePort) || HardwarePort == Description
+                ? $"{Name} - {IPv4Address} ({Description}){(IsPrimaryInternet ? " [PRIMARY]" : "")}"
+                : $"{Name} [{HardwarePort}] - {IPv4Address}{(IsPrimaryInternet ? " [PRIMARY]" : "")}";
+        }
+    }
+}
+
+public sealed class CameraConnectionTestResult
+{
+    public bool IsReachable { get; set; }
+    public double LatencyMs { get; set; }
+    public int StatusCode { get; set; }
+    public string StatusMessage { get; set; } = string.Empty;
+    public bool IsOnvifPortOpen { get; set; }
+    public bool IsRtspPortOpen { get; set; }
+    public string? DiagnosticDetails { get; set; }
+    public DateTime TestedAtUtc { get; set; } = DateTime.UtcNow;
+
+    public CameraConnectionTestResult() { }
+
+    public CameraConnectionTestResult(bool isReachable, double latencyMs, bool isOnvifPortOpen, bool isRtspPortOpen, string? statusMessage = null)
+    {
+        IsReachable = isReachable;
+        LatencyMs = latencyMs;
+        IsOnvifPortOpen = isOnvifPortOpen;
+        IsRtspPortOpen = isRtspPortOpen;
+        StatusMessage = statusMessage ?? (isReachable ? "OK" : "Failed");
+    }
 }
 
 public sealed class DiscoverySession

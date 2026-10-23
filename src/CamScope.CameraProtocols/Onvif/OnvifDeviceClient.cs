@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -62,6 +64,83 @@ public sealed class OnvifDeviceClient : IOnvifClient
             _logger.LogDebug(ex, "Probe reachable failed for {Address}", serviceAddress);
             return false;
         }
+    }
+
+    public async Task<CameraConnectionTestResult> TestConnectionAsync(string serviceAddress, TimeSpan timeout, CancellationToken ct = default)
+    {
+        ValidateEndpoint(serviceAddress);
+        var uri = new Uri(serviceAddress);
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 80;
+
+        var sw = Stopwatch.StartNew();
+        var result = new CameraConnectionTestResult();
+
+        // 1. TCP Connect probe to ONVIF port
+        bool portOpen = false;
+        try
+        {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            using var socketTimeoutCts = new CancellationTokenSource(timeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, socketTimeoutCts.Token);
+            await socket.ConnectAsync(host, port, linked.Token);
+            portOpen = true;
+            result.IsOnvifPortOpen = true;
+        }
+        catch (Exception ex)
+        {
+            result.IsReachable = false;
+            result.LatencyMs = sw.Elapsed.TotalMilliseconds;
+            result.StatusMessage = $"TCP connection to {host}:{port} failed: {ex.Message}";
+            result.DiagnosticDetails = ex.ToString();
+            return result;
+        }
+
+        // 2. HTTP GET probe
+        try
+        {
+            using var timeoutCts = new CancellationTokenSource(timeout);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, serviceAddress);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
+
+            sw.Stop();
+            result.IsReachable = true;
+            result.LatencyMs = Math.Round(sw.Elapsed.TotalMilliseconds, 1);
+            result.StatusCode = (int)response.StatusCode;
+            result.StatusMessage = $"Reachable ({result.LatencyMs}ms) - HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            result.LatencyMs = Math.Round(sw.Elapsed.TotalMilliseconds, 1);
+            if (portOpen)
+            {
+                result.IsReachable = true;
+                result.StatusMessage = $"Port {port} open ({result.LatencyMs}ms), HTTP probe: {ex.Message}";
+            }
+            else
+            {
+                result.IsReachable = false;
+                result.StatusMessage = $"Host unreachable: {ex.Message}";
+            }
+        }
+
+        // 3. RTSP port probe (554)
+        try
+        {
+            using var rtspSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            using var rtspCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+            await rtspSocket.ConnectAsync(host, 554, rtspCts.Token);
+            result.IsRtspPortOpen = true;
+        }
+        catch
+        {
+            result.IsRtspPortOpen = false;
+        }
+
+        return result;
     }
 
     public async Task<DeviceInformationResult> GetDeviceInformationAsync(

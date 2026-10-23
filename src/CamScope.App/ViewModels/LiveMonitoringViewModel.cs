@@ -37,16 +37,51 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _locationOsdTag = "";
     [ObservableProperty] private string _liveClockText = "";
     [ObservableProperty] private string _protocolText = "SIMULATED / DEMO";
+    private readonly DeviceManagementService? _deviceService;
+
     [ObservableProperty] private bool _isDemoDevice;
     [ObservableProperty] private bool _isUnauthenticated;
     [ObservableProperty] private bool _isSimulatedFeed;
+    [ObservableProperty] private bool _isTestingConnection;
+    [ObservableProperty] private string? _testResultText;
+    [ObservableProperty] private string _transportBadgeText = "RTSP/TCP";
+
+    public string ConnectionStatusBadge
+    {
+        get
+        {
+            if (Device == null) return "NO CAMERA";
+            if (IsDemoDevice) return "DEMO";
+            if (IsUnauthenticated) return "AUTHENTICATION REQUIRED";
+            if (State == StreamState.Streaming) return "REAL LIVE FEED";
+            if (State == StreamState.Connecting || State == StreamState.Reconnecting) return "CONNECTING";
+            if (State == StreamState.Error || Device.ConnectionState == DeviceConnectionState.Unavailable) return "OFFLINE";
+            return "READY";
+        }
+    }
+
+    public bool IsRealLiveFeed => State == StreamState.Streaming && !IsDemoDevice;
+    public bool IsConnecting => (State == StreamState.Connecting || State == StreamState.Reconnecting) && !IsDemoDevice;
+    public bool IsOffline => State == StreamState.Error || (Device != null && Device.ConnectionState == DeviceConnectionState.Unavailable);
+
+    public void NotifyStatusProperties()
+    {
+        OnPropertyChanged(nameof(ConnectionStatusBadge));
+        OnPropertyChanged(nameof(IsRealLiveFeed));
+        OnPropertyChanged(nameof(IsConnecting));
+        OnPropertyChanged(nameof(IsOffline));
+    }
 
     public ObservableCollection<CameraDevice> AvailableCameras { get; }
 
-    public LiveCellViewModel(IStreamingService streamingService, ObservableCollection<CameraDevice> availableCameras)
+    public LiveCellViewModel(
+        IStreamingService streamingService,
+        ObservableCollection<CameraDevice> availableCameras,
+        DeviceManagementService? deviceService = null)
     {
         _streamingService = streamingService;
         AvailableCameras = availableCameras;
+        _deviceService = deviceService;
 
         LiveClockText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff UTC");
 
@@ -61,6 +96,38 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
                 LiveClockText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff UTC");
             };
             _clockTimer.Start();
+        }
+    }
+
+    [RelayCommand]
+    public async Task TestConnectionAsync()
+    {
+        if (Device == null) return;
+        IsTestingConnection = true;
+        TestResultText = "Probing...";
+
+        try
+        {
+            if (_deviceService != null)
+            {
+                var result = await _deviceService.TestDeviceConnectionAsync(Device);
+                TestResultText = result.IsReachable
+                    ? $"Reachable ({result.LatencyMs:F1}ms)"
+                    : $"Unreachable: {result.StatusMessage}";
+                NotifyStatusProperties();
+            }
+            else
+            {
+                TestResultText = "Service not available";
+            }
+        }
+        catch (Exception ex)
+        {
+            TestResultText = $"Probe failed: {ex.Message}";
+        }
+        finally
+        {
+            IsTestingConnection = false;
         }
     }
 
@@ -90,6 +157,11 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
             {
                 LoadPosterFrame(newValue);
             }
+
+            TransportBadgeText = !string.IsNullOrWhiteSpace(newValue.RtspTransport)
+                ? $"RTSP/{newValue.RtspTransport.ToUpperInvariant()}"
+                : "RTSP/TCP";
+            NotifyStatusProperties();
         }
         else
         {
@@ -99,9 +171,11 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
             IsDemoDevice = false;
             IsUnauthenticated = false;
             IsSimulatedFeed = false;
+            TransportBadgeText = "RTSP/TCP";
             StatusText = "Idle - Select an authenticated camera";
             CurrentBitmap?.Dispose();
             CurrentBitmap = null;
+            NotifyStatusProperties();
         }
     }
 
@@ -145,6 +219,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
             ErrorMessage = "Device must be authenticated before viewing live stream.";
             StatusText = "Authentication required";
             State = StreamState.Error;
+            NotifyStatusProperties();
             return;
         }
 
@@ -174,6 +249,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         IsStreaming = false;
         State = StreamState.Idle;
         StatusText = "Stream stopped.";
+        NotifyStatusProperties();
 
         if (Device != null && Device.IsDemoDevice && Avalonia.Application.Current != null)
         {
@@ -252,6 +328,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
             {
                 ErrorMessage = msg;
             }
+            NotifyStatusProperties();
         });
     }
 
@@ -270,11 +347,33 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
     private readonly IDeviceRepository _deviceRepository;
     private readonly IStreamingService _streamingService;
     private readonly Func<bool>? _isDemoModeFunc;
+    private readonly INetworkSelectionService? _selectionService;
+    private readonly INetworkInterfaceProvider? _interfaceProvider;
+    private readonly DeviceManagementService? _deviceService;
+    private readonly Action? _navigateToDiscovery;
 
     [ObservableProperty] private int _gridLayout = 4; // 1, 4, 9
     [ObservableProperty] private int _gridColumns = 2;
     [ObservableProperty] private int _gridRows = 2;
     [ObservableProperty] private LiveCellViewModel? _selectedCell;
+
+    // Interface Selector
+    [ObservableProperty] private NetworkInterfaceInfo? _selectedInterface;
+    public ObservableCollection<NetworkInterfaceInfo> Interfaces { get; } = [];
+
+    // Quick Add Modal Dialog
+    [ObservableProperty] private bool _isQuickAddDialogOpen;
+    [ObservableProperty] private int _quickAddProtocolIndex = 0; // 0: ONVIF, 1: RTSP
+    [ObservableProperty] private string _quickAddName = "Camera";
+    [ObservableProperty] private string _quickAddHostOrUrl = "192.168.1.100";
+    [ObservableProperty] private int _quickAddPort = 80;
+    [ObservableProperty] private string _quickAddPath = "/onvif/device_service";
+    [ObservableProperty] private string _quickAddUsername = "";
+    [ObservableProperty] private string _quickAddPassword = "";
+    [ObservableProperty] private string _quickAddLocation = "";
+    [ObservableProperty] private string _quickAddRtspTransport = "tcp";
+    [ObservableProperty] private string? _quickAddError;
+    [ObservableProperty] private bool _isQuickAdding;
 
     public ObservableCollection<LiveCellViewModel> Cells { get; } = [];
     public ObservableCollection<CameraDevice> AuthenticatedCameras { get; } = [];
@@ -283,13 +382,205 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
     public LiveMonitoringViewModel(
         IDeviceRepository deviceRepository,
         IStreamingService streamingService,
-        Func<bool>? isDemoModeFunc = null)
+        Func<bool>? isDemoModeFunc = null,
+        INetworkSelectionService? selectionService = null,
+        INetworkInterfaceProvider? interfaceProvider = null,
+        DeviceManagementService? deviceService = null,
+        Action? navigateToDiscovery = null)
     {
         _deviceRepository = deviceRepository;
         _streamingService = streamingService;
         _isDemoModeFunc = isDemoModeFunc;
+        _selectionService = selectionService;
+        _interfaceProvider = interfaceProvider;
+        _deviceService = deviceService;
+        _navigateToDiscovery = navigateToDiscovery;
 
+        if (_selectionService != null)
+        {
+            _selectionService.SelectionChanged += OnExternalSelectionChanged;
+        }
+
+        if (_interfaceProvider != null)
+        {
+            try
+            {
+                _interfaceProvider.InterfacesChanged += () =>
+                {
+                    Dispatcher.UIThread.Post(LoadInterfaces);
+                };
+            }
+            catch
+            {
+                // Ignore mock event registration
+            }
+        }
+
+        LoadInterfaces();
         SetLayout(4); // Default to 2x2 grid
+    }
+
+    private void OnExternalSelectionChanged(NetworkInterfaceInfo? iface)
+    {
+        if (iface == null) return;
+        var matching = Interfaces.FirstOrDefault(i => i.Id == iface.Id || i.IPv4Address == iface.IPv4Address);
+        if (matching != null && matching != SelectedInterface)
+        {
+            SelectedInterface = matching;
+        }
+    }
+
+    public void LoadInterfaces()
+    {
+        Interfaces.Clear();
+        if (_interfaceProvider != null)
+        {
+            var ifaces = _interfaceProvider.GetEligibleInterfaces(includeLoopback: false);
+            foreach (var i in ifaces)
+            {
+                Interfaces.Add(i);
+            }
+        }
+
+        var currentSelected = _selectionService?.CurrentScanningInterface;
+        if (currentSelected != null)
+        {
+            SelectedInterface = Interfaces.FirstOrDefault(i => i.Id == currentSelected.Id || i.IPv4Address == currentSelected.IPv4Address);
+        }
+
+        SelectedInterface ??= Interfaces.FirstOrDefault();
+    }
+
+    partial void OnSelectedInterfaceChanged(NetworkInterfaceInfo? value)
+    {
+        if (value != null)
+        {
+            _selectionService?.SelectScanningInterface(value);
+        }
+    }
+
+    partial void OnQuickAddProtocolIndexChanged(int value)
+    {
+        if (value == 0) // ONVIF
+        {
+            QuickAddPort = 80;
+            QuickAddHostOrUrl = "192.168.1.100";
+        }
+        else // RTSP
+        {
+            QuickAddPort = 554;
+            QuickAddHostOrUrl = "rtsp://192.168.1.100:554/stream1";
+        }
+        OnPropertyChanged(nameof(IsQuickAddOnvif));
+        OnPropertyChanged(nameof(IsQuickAddRtsp));
+    }
+
+    public bool IsQuickAddOnvif => QuickAddProtocolIndex == 0;
+    public bool IsQuickAddRtsp => QuickAddProtocolIndex == 1;
+
+    [RelayCommand]
+    public void OpenQuickAddDialog()
+    {
+        QuickAddProtocolIndex = 0;
+        QuickAddName = "Camera";
+        QuickAddHostOrUrl = "192.168.1.100";
+        QuickAddPort = 80;
+        QuickAddPath = "/onvif/device_service";
+        QuickAddUsername = "";
+        QuickAddPassword = "";
+        QuickAddLocation = "";
+        QuickAddError = null;
+        IsQuickAddDialogOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseQuickAddDialog()
+    {
+        IsQuickAddDialogOpen = false;
+        QuickAddError = null;
+    }
+
+    [RelayCommand]
+    public async Task SubmitQuickAddCameraAsync()
+    {
+        if (_deviceService == null)
+        {
+            QuickAddError = "Device service unavailable.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(QuickAddHostOrUrl))
+        {
+            QuickAddError = "Host / URL is required.";
+            return;
+        }
+
+        IsQuickAdding = true;
+        QuickAddError = null;
+
+        try
+        {
+            CameraDevice dev;
+            if (QuickAddProtocolIndex == 0) // ONVIF
+            {
+                var host = QuickAddHostOrUrl.Trim();
+                if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Uri.TryCreate(host, UriKind.Absolute, out var u))
+                    {
+                        host = u.Host;
+                        if (u.Port > 0) QuickAddPort = u.Port;
+                    }
+                }
+
+                dev = await _deviceService.AddManualDeviceAsync(
+                    host,
+                    QuickAddPort,
+                    QuickAddPath,
+                    string.IsNullOrWhiteSpace(QuickAddUsername) ? null : QuickAddUsername.Trim(),
+                    string.IsNullOrWhiteSpace(QuickAddPassword) ? null : QuickAddPassword);
+            }
+            else // Direct RTSP
+            {
+                dev = await _deviceService.AddManualRtspDeviceAsync(
+                    QuickAddName,
+                    QuickAddHostOrUrl.Trim(),
+                    string.IsNullOrWhiteSpace(QuickAddUsername) ? null : QuickAddUsername.Trim(),
+                    string.IsNullOrWhiteSpace(QuickAddPassword) ? null : QuickAddPassword,
+                    string.IsNullOrWhiteSpace(QuickAddLocation) ? null : QuickAddLocation.Trim(),
+                    QuickAddRtspTransport);
+            }
+
+            if (SelectedInterface != null)
+            {
+                dev.DiscoveryInterfaceName = SelectedInterface.Name;
+                dev.Tags.Add($"interface:{SelectedInterface.Name}");
+            }
+
+            IsQuickAddDialogOpen = false;
+            await LoadCamerasAsync();
+
+            // Assign to first empty cell
+            var emptyCell = Cells.FirstOrDefault(c => c.Device == null);
+            if (emptyCell != null)
+            {
+                emptyCell.Device = dev;
+            }
+        }
+        catch (Exception ex)
+        {
+            QuickAddError = ex.Message;
+        }
+        finally
+        {
+            IsQuickAdding = false;
+        }
+    }
+
+    [RelayCommand]
+    public void TriggerDiscovery()
+    {
+        _navigateToDiscovery?.Invoke();
     }
 
     [RelayCommand]
@@ -365,7 +656,7 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
 
         while (Cells.Count < cellCount)
         {
-            var cell = new LiveCellViewModel(_streamingService, AvailableCameras);
+            var cell = new LiveCellViewModel(_streamingService, AvailableCameras, _deviceService);
             Cells.Add(cell);
         }
         while (Cells.Count > cellCount)

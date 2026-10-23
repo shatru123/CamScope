@@ -27,6 +27,9 @@ public sealed class CameraDevice
     public List<string> Tags { get; set; } = [];
     public string? Location { get; set; }
     public string? RtspStreamUri { get; set; }
+    public string RtspTransport { get; set; } = "tcp";
+    public string? DiscoveryInterfaceName { get; set; }
+    public double? LastMeasuredLatencyMs { get; set; }
 
     public bool IsAuthenticated => AuthState == AuthenticationState.Authenticated;
     public bool CanStream => Capabilities.LiveStreaming == CapabilityStatus.Supported;

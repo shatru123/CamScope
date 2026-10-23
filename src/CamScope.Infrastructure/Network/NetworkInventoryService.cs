@@ -781,7 +781,7 @@ public sealed class NetworkInventoryService : INetworkInventoryService
         return (currentSsid, deduped);
     }
 
-    private static string FormatMacAddress(byte[] bytes)
+    public static string FormatMacAddress(byte[] bytes)
     {
         if (bytes == null || bytes.Length != 6)
             return string.Empty;

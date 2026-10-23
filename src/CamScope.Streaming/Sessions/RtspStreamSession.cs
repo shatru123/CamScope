@@ -32,6 +32,8 @@ public sealed class RtspStreamSession : IStreamingSession
     public double CurrentFps => _currentFps;
     public string? StreamResolution { get; private set; } = "1920x1080";
     public string? LastError { get; private set; }
+    public int SocketTimeoutSeconds { get; set; } = 8;
+    public string Transport => string.Equals(_device.RtspTransport, "udp", StringComparison.OrdinalIgnoreCase) ? "UDP" : "TCP";
 
     public event Action<byte[]>? FrameReceived;
     public event Action<StreamState, string?>? StateChanged;
@@ -284,26 +286,12 @@ public sealed class RtspStreamSession : IStreamingSession
             CreateNoWindow = true
         };
 
-        psi.ArgumentList.Add("-hide_banner");
-        psi.ArgumentList.Add("-loglevel");
-        psi.ArgumentList.Add("warning");
-        if (rtspUri.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+        var transport = string.IsNullOrWhiteSpace(_device.RtspTransport) ? "tcp" : _device.RtspTransport;
+        var args = BuildFfmpegArguments(rtspUri, transport, SocketTimeoutSeconds);
+        foreach (var arg in args)
         {
-            psi.ArgumentList.Add("-rtsp_transport");
-            psi.ArgumentList.Add("tcp");
+            psi.ArgumentList.Add(arg);
         }
-        else if (rtspUri.StartsWith("testsrc=", StringComparison.OrdinalIgnoreCase))
-        {
-            psi.ArgumentList.Add("-f");
-            psi.ArgumentList.Add("lavfi");
-        }
-        psi.ArgumentList.Add("-i");
-        psi.ArgumentList.Add(rtspUri);
-        psi.ArgumentList.Add("-f");
-        psi.ArgumentList.Add("image2pipe");
-        psi.ArgumentList.Add("-vcodec");
-        psi.ArgumentList.Add("bmp");
-        psi.ArgumentList.Add("-");
 
         using var process = new Process { StartInfo = psi };
         _ffmpegProcess = process;
@@ -425,6 +413,45 @@ public sealed class RtspStreamSession : IStreamingSession
         {
             // Ignore kill exceptions if process exited
         }
+    }
+
+    public static List<string> BuildFfmpegArguments(string rtspUri, string? transport = "tcp", int timeoutSeconds = 8)
+    {
+        var args = new List<string>
+        {
+            "-hide_banner",
+            "-loglevel",
+            "warning"
+        };
+
+        if (rtspUri.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+        {
+            var cleanTransport = string.Equals(transport, "udp", StringComparison.OrdinalIgnoreCase) ? "udp" : "tcp";
+            args.Add("-rtsp_transport");
+            args.Add(cleanTransport);
+            args.Add("-stimeout");
+            int effectiveTimeout = timeoutSeconds <= 0 ? 5 : timeoutSeconds;
+            args.Add((effectiveTimeout * 1_000_000).ToString());
+            args.Add("-fflags");
+            args.Add("nobuffer");
+            args.Add("-flags");
+            args.Add("low_delay");
+        }
+        else if (rtspUri.StartsWith("testsrc=", StringComparison.OrdinalIgnoreCase))
+        {
+            args.Add("-f");
+            args.Add("lavfi");
+        }
+
+        args.Add("-i");
+        args.Add(rtspUri);
+        args.Add("-f");
+        args.Add("image2pipe");
+        args.Add("-vcodec");
+        args.Add("bmp");
+        args.Add("-");
+
+        return args;
     }
 
     public static string BuildAuthenticatedRtspUri(string rawUri, string? username, string? password)

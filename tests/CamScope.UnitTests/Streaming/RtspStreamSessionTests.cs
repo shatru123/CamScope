@@ -127,4 +127,20 @@ public class RtspStreamSessionTests
         await session.StopAsync();
         Assert.Equal(StreamState.Idle, session.State);
     }
+
+    [Theory]
+    [InlineData("tcp", 5, "-rtsp_transport tcp", "-stimeout 5000000")]
+    [InlineData("udp", 10, "-rtsp_transport udp", "-stimeout 10000000")]
+    [InlineData("TCP", 3, "-rtsp_transport tcp", "-stimeout 3000000")]
+    [InlineData(null, 0, "-rtsp_transport tcp", "-stimeout 5000000")]
+    public void BuildFfmpegArguments_SetsTransportAndTimeoutProperly(string? transport, int timeoutSec, string expectedTransportFlag, string expectedTimeoutFlag)
+    {
+        var argsList = RtspStreamSession.BuildFfmpegArguments("rtsp://192.168.1.100:554/stream", transport, timeoutSec);
+        var args = string.Join(" ", argsList);
+
+        Assert.Contains(expectedTransportFlag, args);
+        Assert.Contains(expectedTimeoutFlag, args);
+        Assert.Contains("-fflags nobuffer -flags low_delay", args);
+        Assert.Contains("-i rtsp://192.168.1.100:554/stream", args);
+    }
 }

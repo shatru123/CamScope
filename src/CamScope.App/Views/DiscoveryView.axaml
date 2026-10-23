@@ -57,15 +57,116 @@
             </CheckBox>
           </Border>
 
-          <!-- Discovery Action Buttons -->
-          <StackPanel Orientation="Horizontal" Spacing="12">
-            <Button Content="Start WS-Discovery" Command="{Binding StartDiscoveryCommand}"
-                    IsEnabled="{Binding CanStartDiscovery}" Classes="primary"/>
-            <Button Content="Cancel Discovery" Command="{Binding CancelDiscoveryCommand}"
-                    IsEnabled="{Binding IsDiscovering}" Classes="danger"/>
-            <Button Content="Add Discovered to Inventory" Command="{Binding SaveAllToInventoryCommand}"
-                    IsEnabled="{Binding DiscoveredDevices.Count}" Classes="secondary"/>
-          </StackPanel>
+          <!-- Discovery Methodology Tabs -->
+          <TabControl Margin="0,4,0,0">
+            <!-- Tab 1: WS-Discovery -->
+            <TabItem Header="WS-Discovery (Multicast)">
+              <StackPanel Spacing="12" Margin="0,12,0,0">
+                <TextBlock Text="Broadcast standard WS-Discovery probes (239.255.255.250:3702) across the selected interface." FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                  <Button Content="Start WS-Discovery" Command="{Binding StartDiscoveryCommand}"
+                          IsEnabled="{Binding CanStartDiscovery}" Classes="primary"/>
+                  <Button Content="Cancel Discovery" Command="{Binding CancelDiscoveryCommand}"
+                          IsEnabled="{Binding IsDiscovering}" Classes="danger"/>
+                  <Button Content="Add Discovered to Inventory" Command="{Binding SaveAllToInventoryCommand}"
+                          IsEnabled="{Binding DiscoveredDevices.Count}" Classes="secondary"/>
+                </StackPanel>
+              </StackPanel>
+            </TabItem>
+
+            <!-- Tab 2: Directed Subnet Scan -->
+            <TabItem Header="Directed Subnet Scan (CIDR)">
+              <StackPanel Spacing="12" Margin="0,12,0,0">
+                <TextBlock Text="Sweep a target IP subnet range with directed WS-Discovery unicast probes to locate cameras across VLANs or isolated switches." FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+                <Grid ColumnDefinitions="*, Auto, Auto" Margin="0,4,0,0">
+                  <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,10,0">
+                    <TextBlock Text="Target Subnet (CIDR):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <TextBox Text="{Binding SubnetCidr}" Watermark="e.g. 192.168.1.0/24"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Spacing="4" Margin="0,0,10,0">
+                    <TextBlock Text="Concurrency:" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <NumericUpDown Value="{Binding SubnetConcurrency}" Minimum="1" Maximum="32" Width="100"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Spacing="4">
+                    <TextBlock Text="Timeout (ms):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <NumericUpDown Value="{Binding SubnetTimeoutMs}" Minimum="100" Maximum="3000" Width="110"/>
+                  </StackPanel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                  <Button Content="Start Subnet Scan" Command="{Binding StartSubnetScanCommand}"
+                          IsEnabled="{Binding CanStartDiscovery}" Classes="primary"/>
+                  <Button Content="Cancel Scan" Command="{Binding CancelDiscoveryCommand}"
+                          IsEnabled="{Binding IsDiscovering}" Classes="danger"/>
+                  <Button Content="Add Discovered to Inventory" Command="{Binding SaveAllToInventoryCommand}"
+                          IsEnabled="{Binding DiscoveredDevices.Count}" Classes="secondary"/>
+                </StackPanel>
+              </StackPanel>
+            </TabItem>
+
+            <!-- Tab 3: Manual Camera Add -->
+            <TabItem Header="Manual Camera Add">
+              <StackPanel Spacing="12" Margin="0,12,0,0">
+                <TextBlock Text="Directly connect an authorized camera by entering its IP address, ONVIF service path, or direct RTSP stream URL." FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+
+                <Grid ColumnDefinitions="160, *, 100" Margin="0,4,0,0">
+                  <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,10,0">
+                    <TextBlock Text="Protocol:" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <ComboBox SelectedIndex="{Binding ManualProtocolIndex}" HorizontalAlignment="Stretch">
+                      <ComboBoxItem Content="ONVIF Camera"/>
+                      <ComboBoxItem Content="Direct RTSP Stream"/>
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Spacing="4" Margin="0,0,10,0">
+                    <TextBlock Text="Host IP or RTSP Stream URI:" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <TextBox Text="{Binding ManualHostOrUrl}" Watermark="192.168.1.100 or rtsp://..."/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Spacing="4">
+                    <TextBlock Text="Port:" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <NumericUpDown Value="{Binding ManualPort}" Minimum="1" Maximum="65535"/>
+                  </StackPanel>
+                </Grid>
+
+                <Grid ColumnDefinitions="*, *, *" Margin="0,4,0,0">
+                  <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,10,0">
+                    <TextBlock Text="Camera Display Name:" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <TextBox Text="{Binding ManualCameraName}"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Spacing="4" Margin="0,0,10,0">
+                    <TextBlock Text="Username (optional):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <TextBox Text="{Binding ManualUsername}" Watermark="admin"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Spacing="4">
+                    <TextBlock Text="Password (optional):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    <TextBox Text="{Binding ManualPassword}" PasswordChar="●"/>
+                  </StackPanel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                  <Button Content="Test Connection" Command="{Binding TestManualConnectionCommand}"
+                          IsEnabled="{Binding !IsTestingConnection}" Classes="secondary"/>
+                  <Button Content="Add to Inventory" Command="{Binding AddManualCameraCommand}"
+                          Classes="primary"/>
+                  <TextBlock Text="{Binding ConnectionTestResultText}"
+                             IsVisible="{Binding ConnectionTestResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                             Foreground="{StaticResource CyanAccent}" FontSize="12" VerticalAlignment="Center"/>
+                  <TextBlock Text="{Binding ManualAddStatus}"
+                             IsVisible="{Binding ManualAddStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                             Foreground="{StaticResource GreenSuccess}" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+              </StackPanel>
+            </TabItem>
+          </TabControl>
+
+          <!-- VLAN & Client Isolation Disclosure Alert -->
+          <Border Background="#1A2234" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="ℹ️ Network Topology &amp; Isolation Notice" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource CyanAccent}"/>
+              <TextBlock Text="{Binding VlanDisclosureText}"
+                         FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Border>
 
           <!-- Progress Section -->
           <StackPanel Spacing="6" IsVisible="{Binding IsDiscovering}">

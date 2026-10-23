@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using CamScope.Application.Security;
@@ -170,6 +172,131 @@ public sealed class DeviceManagementService
         }
 
         return device;
+    }
+
+    public async Task<CameraDevice> AddManualRtspDeviceAsync(
+        string displayName,
+        string rtspUrl,
+        string? username = null,
+        string? password = null,
+        string? location = null,
+        string transport = "tcp",
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(rtspUrl))
+            throw new ArgumentException("RTSP URL cannot be empty", nameof(rtspUrl));
+
+        var cleanName = string.IsNullOrWhiteSpace(displayName) ? "RTSP Camera" : displayName.Trim();
+        var host = "127.0.0.1";
+        int port = 554;
+
+        if (Uri.TryCreate(rtspUrl, UriKind.Absolute, out var parsedUri))
+        {
+            host = parsedUri.Host;
+            port = parsedUri.Port > 0 ? parsedUri.Port : 554;
+            if (string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(parsedUri.UserInfo))
+            {
+                var userInfoParts = parsedUri.UserInfo.Split(':');
+                if (userInfoParts.Length > 0 && !string.IsNullOrEmpty(userInfoParts[0]))
+                    username = Uri.UnescapeDataString(userInfoParts[0]);
+                if (userInfoParts.Length > 1 && !string.IsNullOrEmpty(userInfoParts[1]))
+                    password = Uri.UnescapeDataString(userInfoParts[1]);
+            }
+        }
+
+        var endpointId = $"rtsp:{host}:{port}/{Guid.NewGuid():N}";
+        bool hasAuth = !string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password);
+
+        var device = new CameraDevice
+        {
+            EndpointId = endpointId,
+            DisplayName = cleanName,
+            Vendor = "Generic RTSP",
+            Model = "H.264/H.265 RTSP Stream",
+            Host = host,
+            Port = port,
+            RtspStreamUri = rtspUrl.Trim(),
+            RtspTransport = string.Equals(transport, "udp", StringComparison.OrdinalIgnoreCase) ? "udp" : "tcp",
+            Location = location?.Trim(),
+            Scopes = ["rtsp://video-transmitter"],
+            ConnectionState = DeviceConnectionState.Connected,
+            AuthState = hasAuth ? AuthenticationState.Authenticated : AuthenticationState.Unauthenticated,
+            Capabilities = new DeviceCapabilities
+            {
+                LiveStreaming = CapabilityStatus.Supported,
+                Ptz = CapabilityStatus.Unsupported,
+                RecordingSearch = CapabilityStatus.Unsupported,
+                Analytics = CapabilityStatus.Unsupported
+            },
+            Protocol = CameraProtocolType.RTSP,
+            FirstSeenUtc = DateTime.UtcNow,
+            LastSeenUtc = DateTime.UtcNow
+        };
+
+        if (hasAuth)
+        {
+            await _credentialStore.SaveCredentialsAsync(endpointId, username!, password!, ct);
+        }
+
+        await _deviceRepository.AddOrUpdateAsync(device, ct);
+
+        await _auditService.LogAsync(
+            AuditAction.DeviceAddedManually,
+            endpointId,
+            succeeded: true,
+            $"Manually added direct RTSP device '{cleanName}' ({SecretRedactor.Redact(rtspUrl)})",
+            ct: ct);
+
+        return device;
+    }
+
+    public async Task<CameraConnectionTestResult> TestDeviceConnectionAsync(CameraDevice device, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+
+        var sw = Stopwatch.StartNew();
+        CameraConnectionTestResult result;
+
+        if (device.Protocol == CameraProtocolType.Onvif && !string.IsNullOrWhiteSpace(device.PrimaryServiceAddress))
+        {
+            result = await _onvifClient.TestConnectionAsync(device.PrimaryServiceAddress, TimeSpan.FromSeconds(3), ct);
+        }
+        else
+        {
+            // Direct RTSP or TCP probe
+            result = new CameraConnectionTestResult();
+            var port = device.Port > 0 ? device.Port : 554;
+            try
+            {
+                using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, cts.Token);
+                await socket.ConnectAsync(device.Host, port, linked.Token);
+
+                sw.Stop();
+                result.IsReachable = true;
+                result.IsRtspPortOpen = true;
+                result.LatencyMs = Math.Round(sw.Elapsed.TotalMilliseconds, 1);
+                result.StatusMessage = $"Reachable ({result.LatencyMs}ms) - Port {port} Open";
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                result.IsReachable = false;
+                result.LatencyMs = Math.Round(sw.Elapsed.TotalMilliseconds, 1);
+                result.StatusMessage = $"Unreachable: {ex.Message}";
+                result.DiagnosticDetails = ex.ToString();
+            }
+        }
+
+        device.LastMeasuredLatencyMs = result.LatencyMs;
+        device.LastSeenUtc = DateTime.UtcNow;
+        if (result.IsReachable && device.ConnectionState == DeviceConnectionState.Unavailable)
+        {
+            device.ConnectionState = DeviceConnectionState.Reachable;
+        }
+
+        return result;
     }
 
     public async Task DeleteDeviceAsync(Guid deviceId, CancellationToken ct = default)

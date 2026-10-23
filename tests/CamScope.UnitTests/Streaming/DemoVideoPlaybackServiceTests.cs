@@ -61,6 +61,8 @@ public class DemoVideoPlaybackServiceTests
             Task.FromResult<string?>("rtsp://127.0.0.1/live");
         public Task<IReadOnlyList<RecordingSegment>> FindRecordingsAsync(string serviceAddress, DateTime startUtc, DateTime endUtc, string? username, string? password, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<RecordingSegment>>([]);
+        public Task<CameraConnectionTestResult> TestConnectionAsync(string serviceAddress, TimeSpan timeout, CancellationToken ct = default) =>
+            Task.FromResult(new CameraConnectionTestResult(true, 10.0, true, true, null));
     }
 
     [Fact]

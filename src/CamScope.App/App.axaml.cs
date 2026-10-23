@@ -152,7 +152,9 @@ public partial class App : Avalonia.Application
             sp.GetRequiredService<IDeviceRepository>(),
             sp.GetRequiredService<IAuditService>(),
             () => isDemoModeHolder.IsDemoMode,
-            sp.GetRequiredService<INetworkSelectionService>()));
+            sp.GetRequiredService<INetworkSelectionService>(),
+            sp.GetRequiredService<ISubnetScanner>(),
+            sp.GetRequiredService<DeviceManagementService>()));
 
         services.AddSingleton<InventoryViewModel>(sp => new InventoryViewModel(
             sp.GetRequiredService<IDeviceRepository>(),
@@ -162,7 +164,11 @@ public partial class App : Avalonia.Application
         services.AddSingleton<LiveMonitoringViewModel>(sp => new LiveMonitoringViewModel(
             sp.GetRequiredService<IDeviceRepository>(),
             sp.GetRequiredService<IStreamingService>(),
-            () => isDemoModeHolder.IsDemoMode));
+            () => isDemoModeHolder.IsDemoMode,
+            sp.GetRequiredService<INetworkSelectionService>(),
+            sp.GetRequiredService<INetworkInterfaceProvider>(),
+            sp.GetRequiredService<DeviceManagementService>(),
+            () => sp.GetRequiredService<MainWindowViewModel>().NavigateToIndex(1)));
         services.AddSingleton<RecordingsViewModel>(sp => new RecordingsViewModel(
             sp.GetRequiredService<IDeviceRepository>(),
             sp.GetRequiredService<IOnvifClient>(),

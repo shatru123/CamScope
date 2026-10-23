@@ -4,216 +4,355 @@
              x:Class="CamScope.App.Views.LiveMonitoringView"
              x:DataType="vm:LiveMonitoringViewModel">
 
-  <Grid RowDefinitions="Auto, *">
+  <Grid>
+    <!-- Main Live Monitoring Layout -->
+    <Grid RowDefinitions="Auto, *">
 
-    <!-- Top Toolbar -->
-    <Border Grid.Row="0" Classes="card" Margin="0,0,0,16" Padding="12">
-      <Grid ColumnDefinitions="Auto, *, Auto">
+      <!-- Top Toolbar -->
+      <Border Grid.Row="0" Classes="card" Margin="0,0,0,16" Padding="12">
+        <Grid ColumnDefinitions="Auto, Auto, *, Auto">
 
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-          <TextBlock Text="Grid Layout:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-          <Button Content="1x1 Single" Command="{Binding SetLayoutCommand}" CommandParameter="1" Classes="secondary"/>
-          <Button Content="2x2 Quad" Command="{Binding SetLayoutCommand}" CommandParameter="4" Classes="secondary"/>
-          <Button Content="3x3 Matrix" Command="{Binding SetLayoutCommand}" CommandParameter="9" Classes="secondary"/>
-        </StackPanel>
+          <!-- CCTV Network Interface Selector -->
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,16,0">
+            <TextBlock Text="CCTV Adapter:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <ComboBox ItemsSource="{Binding Interfaces}"
+                      SelectedItem="{Binding SelectedInterface}"
+                      Width="240">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding DisplayName}" ToolTip.Tip="{Binding IPv4Address, StringFormat='IP: {0}'}"/>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-          <Button Content="Start All Streams" Command="{Binding StartAllCommand}" Classes="primary"/>
-          <Button Content="Stop All" Command="{Binding StopAllCommand}" Classes="danger"/>
-        </StackPanel>
+          <!-- Grid Layout Buttons -->
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <TextBlock Text="Layout:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Button Content="1x1" Command="{Binding SetLayoutCommand}" CommandParameter="1" Classes="secondary" Padding="10,6"/>
+            <Button Content="2x2" Command="{Binding SetLayoutCommand}" CommandParameter="4" Classes="secondary" Padding="10,6"/>
+            <Button Content="3x3" Command="{Binding SetLayoutCommand}" CommandParameter="9" Classes="secondary" Padding="10,6"/>
+          </StackPanel>
 
-      </Grid>
-    </Border>
+          <!-- Right Action Controls -->
+          <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Button Content="🔍 Discover" Command="{Binding TriggerDiscoveryCommand}" Classes="secondary"/>
+            <Button Content="➕ Quick Add" Command="{Binding OpenQuickAddDialogCommand}" Classes="secondary"/>
+            <Button Content="Start All Streams" Command="{Binding StartAllCommand}" Classes="primary"/>
+            <Button Content="Stop All" Command="{Binding StopAllCommand}" Classes="danger"/>
+          </StackPanel>
 
-    <!-- Multi-Camera Grid Viewport -->
-    <ItemsControl Grid.Row="1" ItemsSource="{Binding Cells}">
-      <ItemsControl.ItemsPanel>
-        <ItemsPanelTemplate>
-          <UniformGrid Rows="{Binding GridRows}" Columns="{Binding GridColumns}"/>
-        </ItemsPanelTemplate>
-      </ItemsControl.ItemsPanel>
+        </Grid>
+      </Border>
 
-      <ItemsControl.ItemTemplate>
-        <DataTemplate DataType="vm:LiveCellViewModel">
-          <Border Classes="card" Margin="4" Padding="6" Background="{StaticResource SurfaceBackground}">
-            <Grid RowDefinitions="Auto, *, Auto">
+      <!-- Multi-Camera Grid Viewport -->
+      <ItemsControl Grid.Row="1" ItemsSource="{Binding Cells}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Rows="{Binding GridRows}" Columns="{Binding GridColumns}"/>
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
 
-              <!-- Cell Header Toolbar -->
-              <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,6">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                  <ComboBox ItemsSource="{Binding AvailableCameras}"
-                            SelectedItem="{Binding Device}" Width="230" PlaceholderText="Select Camera...">
-                    <ComboBox.ItemTemplate>
-                      <DataTemplate>
-                        <TextBlock Text="{Binding DisplayName}"/>
-                      </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                  </ComboBox>
-                  <TextBlock Text="{Binding Device.Host, StringFormat='({0})'}"
-                             FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
-                </StackPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:LiveCellViewModel">
+            <Border Classes="card" Margin="4" Padding="6" Background="{StaticResource SurfaceBackground}">
+              <Grid RowDefinitions="Auto, *, Auto">
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                  <Border Classes="badgeSuccess" IsVisible="{Binding IsStreaming}">
-                    <TextBlock Text="LIVE" FontSize="10" FontWeight="Bold"/>
-                  </Border>
-                  <Border Classes="badgeWarning" IsVisible="{Binding !IsStreaming}">
-                    <TextBlock Text="{Binding State}" FontSize="10" FontWeight="Bold"/>
-                  </Border>
-                </StackPanel>
-              </Grid>
+                <!-- Cell Header Toolbar -->
+                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,6">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <ComboBox ItemsSource="{Binding AvailableCameras}"
+                              SelectedItem="{Binding Device}" Width="210" PlaceholderText="Select Camera...">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
 
-              <!-- Video Viewport / 16:9 Canvas -->
-              <Border Grid.Row="1" Background="#050811" CornerRadius="6" ClipToBounds="True">
-                <Viewbox Stretch="Uniform">
-                  <Grid Width="1280" Height="720">
+                    <Button Content="Test" Command="{Binding TestConnectionCommand}"
+                            IsEnabled="{Binding !IsTestingConnection}"
+                            Classes="secondary" Padding="8,3" FontSize="11"
+                            ToolTip.Tip="Test camera socket and RTSP reachability on selected adapter"/>
 
-                    <!-- Active Decoded Video Frame / Poster -->
-                    <Image Source="{Binding CurrentBitmap}" Stretch="Fill"
-                           IsVisible="{Binding CurrentBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                    <TextBlock Text="{Binding TestResultText}"
+                               FontSize="11" Foreground="{StaticResource CyanAccent}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding TestResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  </StackPanel>
 
-                    <!-- Fallback / Empty Placeholder when no bitmap -->
-                    <Border Background="#050811"
-                            IsVisible="{Binding CurrentBitmap, Converter={x:Static ObjectConverters.IsNull}}">
-                      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                        <TextBlock Text="NO VIDEO SIGNAL" FontWeight="Bold" FontSize="26"
-                                   Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                   FontFamily="Consolas, Menlo, Monaco, monospace"/>
-                        <TextBlock Text="{Binding StatusText}" FontSize="16" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{Binding ErrorMessage}" FontSize="14" Foreground="{StaticResource RedDanger}"
-                                   HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="600"
-                                   IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                      </StackPanel>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <!-- Transport Badge (RTSP/TCP or RTSP/UDP) -->
+                    <Border Classes="badgeCyan" IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Text="{Binding TransportBadgeText}" FontSize="10" FontWeight="Bold"/>
                     </Border>
 
-                    <!-- Unauthenticated Overlay Banner (Camera 4 Thermal when unauthenticated) -->
-                    <Border Background="#D90B0F19"
-                            IsVisible="{Binding IsUnauthenticated}">
-                      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                        <Border Background="#33EF4444" CornerRadius="50" Width="68" Height="68"
-                                HorizontalAlignment="Center">
-                          <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="AUTHENTICATION REQUIRED" FontWeight="Bold" FontSize="24"
-                                   Foreground="#EF4444" HorizontalAlignment="Center"
-                                   FontFamily="Consolas, Menlo, Monaco, monospace"/>
-                        <TextBlock Text="ONVIF PROFILE S STREAM LOCKED" FontSize="16" FontWeight="SemiBold"
-                                   Foreground="#FCA5A5" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Please configure valid camera credentials in Device Inventory to access this thermal telemetry feed."
-                                   FontSize="13" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                   TextWrapping="Wrap" MaxWidth="620" TextAlignment="Center"/>
-                        <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="#F87171"
-                                   HorizontalAlignment="Center"
-                                   IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                      </StackPanel>
+                    <!-- Real Live Feed badge -->
+                    <Border Classes="badgeSuccess" IsVisible="{Binding IsRealLiveFeed}">
+                      <TextBlock Text="REAL LIVE FEED" FontSize="10" FontWeight="Bold"/>
                     </Border>
 
-                    <!-- Center Optical Reticle / Crosshair (Surveillance HUD) -->
-                    <Canvas Width="1280" Height="720" IsHitTestVisible="False" Opacity="0.45"
-                            IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
-                      <!-- Center crosshair -->
-                      <Line StartPoint="620,360" EndPoint="660,360" Stroke="#38BDF8" StrokeThickness="1"/>
-                      <Line StartPoint="640,340" EndPoint="640,380" Stroke="#38BDF8" StrokeThickness="1"/>
-                      <!-- Outer brackets -->
-                      <Path Stroke="#38BDF8" StrokeThickness="1"
-                            Data="M 580,320 L 580,300 L 600,300 M 680,300 L 700,300 L 700,320 M 700,400 L 700,420 L 680,420 M 600,420 L 580,420 L 580,400"/>
-                    </Canvas>
+                    <!-- Demo badge -->
+                    <Border Classes="badgeWarning" IsVisible="{Binding IsDemoDevice}">
+                      <TextBlock Text="DEMO" FontSize="10" FontWeight="Bold"/>
+                    </Border>
 
-                    <!-- Top OSD HUD Bar -->
-                    <Border VerticalAlignment="Top" Background="#B3050912" Padding="18,10"
-                            IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
-                      <Grid ColumnDefinitions="*, Auto">
-                        <!-- Camera Title & Location -->
-                        <StackPanel Grid.Column="0" Spacing="2">
-                          <TextBlock Text="{Binding CameraOsdTag}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="16" FontWeight="Bold" Foreground="#FCD34D"/>
-                          <TextBlock Text="{Binding LocationOsdTag}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="12" Foreground="#94A3B8"/>
+                    <!-- Connecting badge -->
+                    <Border Classes="badgeViolet" IsVisible="{Binding IsConnecting}">
+                      <TextBlock Text="CONNECTING" FontSize="10" FontWeight="Bold"/>
+                    </Border>
+
+                    <!-- Unauthenticated badge -->
+                    <Border Classes="badgeDanger" IsVisible="{Binding IsUnauthenticated}">
+                      <TextBlock Text="AUTH REQUIRED" FontSize="10" FontWeight="Bold"/>
+                    </Border>
+
+                    <!-- Offline badge -->
+                    <Border Classes="badgeDanger" IsVisible="{Binding IsOffline}">
+                      <TextBlock Text="OFFLINE" FontSize="10" FontWeight="Bold"/>
+                    </Border>
+                  </StackPanel>
+                </Grid>
+
+                <!-- Video Viewport / 16:9 Canvas -->
+                <Border Grid.Row="1" Background="#050811" CornerRadius="6" ClipToBounds="True">
+                  <Viewbox Stretch="Uniform">
+                    <Grid Width="1280" Height="720">
+
+                      <!-- Active Decoded Video Frame / Poster -->
+                      <Image Source="{Binding CurrentBitmap}" Stretch="Fill"
+                             IsVisible="{Binding CurrentBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                      <!-- Fallback / Empty Placeholder when no bitmap -->
+                      <Border Background="#050811"
+                              IsVisible="{Binding CurrentBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                          <TextBlock Text="NO VIDEO SIGNAL" FontWeight="Bold" FontSize="26"
+                                     Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                     FontFamily="Consolas, Menlo, Monaco, monospace"/>
+                          <TextBlock Text="{Binding StatusText}" FontSize="16" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center"/>
+                          <TextBlock Text="{Binding ErrorMessage}" FontSize="14" Foreground="{StaticResource RedDanger}"
+                                     HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="600"
+                                     IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         </StackPanel>
+                      </Border>
 
-                        <!-- Right: Live Clock & Status Badge -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                          <!-- Recording / Live Indicator -->
-                          <Border Background="#1A2234" CornerRadius="4" Padding="8,4"
-                                  BorderBrush="#38BDF8" BorderThickness="1">
-                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                              <Ellipse Width="8" Height="8" Fill="#10B981" IsVisible="{Binding IsStreaming}"/>
-                              <Ellipse Width="8" Height="8" Fill="#64748B" IsVisible="{Binding !IsStreaming}"/>
-                              <TextBlock Text="LIVE"
-                                         FontFamily="Consolas, Menlo, Monaco, monospace"
-                                         FontSize="12" FontWeight="Bold" Foreground="#10B981"
-                                         IsVisible="{Binding IsStreaming}"/>
-                              <TextBlock Text="STANDBY"
-                                         FontFamily="Consolas, Menlo, Monaco, monospace"
-                                         FontSize="12" FontWeight="Bold" Foreground="#94A3B8"
-                                         IsVisible="{Binding !IsStreaming}"/>
-                            </StackPanel>
+                      <!-- Unauthenticated Overlay Banner (Camera 4 Thermal when unauthenticated) -->
+                      <Border Background="#D90B0F19"
+                              IsVisible="{Binding IsUnauthenticated}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                          <Border Background="#33EF4444" CornerRadius="50" Width="68" Height="68"
+                                  HorizontalAlignment="Center">
+                            <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                           </Border>
-
-                          <!-- Dynamic Millisecond UTC Clock -->
-                          <TextBlock Text="{Binding LiveClockText}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="16" FontWeight="Bold" Foreground="#F8FAFC"
-                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="AUTHENTICATION REQUIRED" FontWeight="Bold" FontSize="24"
+                                     Foreground="#EF4444" HorizontalAlignment="Center"
+                                     FontFamily="Consolas, Menlo, Monaco, monospace"/>
+                          <TextBlock Text="ONVIF PROFILE S STREAM LOCKED" FontSize="16" FontWeight="SemiBold"
+                                     Foreground="#FCA5A5" HorizontalAlignment="Center"/>
+                          <TextBlock Text="Please configure valid camera credentials in Device Inventory to access this thermal telemetry feed."
+                                     FontSize="13" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                     TextWrapping="Wrap" MaxWidth="620" TextAlignment="Center"/>
+                          <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="#F87171"
+                                     HorizontalAlignment="Center"
+                                     IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         </StackPanel>
-                      </Grid>
-                    </Border>
+                      </Border>
 
-                    <!-- Bottom OSD HUD Bar -->
-                    <Border VerticalAlignment="Bottom" Background="#B3050912" Padding="18,8"
-                            IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
-                      <Grid ColumnDefinitions="*, Auto">
-                        <!-- Bottom Left: Measured Telemetry -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Fps, StringFormat='FPS: {0:F1}'}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="13" FontWeight="Bold" Foreground="#38BDF8"/>
-                          <TextBlock Text="{Binding Resolution, StringFormat='RES: {0}'}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="13" Foreground="#94A3B8"/>
-                          <TextBlock Text="{Binding ProtocolText, StringFormat='NET: {0}'}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="13" Foreground="#94A3B8"/>
-                          <TextBlock Text="{Binding FrameCount, StringFormat='FRAMES: {0:N0}'}"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="13" Foreground="#64748B"/>
-                        </StackPanel>
+                      <!-- Center Optical Reticle / Crosshair (Surveillance HUD) -->
+                      <Canvas Width="1280" Height="720" IsHitTestVisible="False" Opacity="0.45"
+                              IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <!-- Center crosshair -->
+                        <Line StartPoint="620,360" EndPoint="660,360" Stroke="#38BDF8" StrokeThickness="1"/>
+                        <Line StartPoint="640,340" EndPoint="640,380" Stroke="#38BDF8" StrokeThickness="1"/>
+                        <!-- Outer brackets -->
+                        <Path Stroke="#38BDF8" StrokeThickness="1"
+                              Data="M 580,320 L 580,300 L 600,300 M 680,300 L 700,300 L 700,320 M 700,400 L 700,420 L 680,420 M 600,420 L 580,420 L 580,400"/>
+                      </Canvas>
 
-                        <!-- Bottom Right: Simulated Demo Feed Watermark -->
-                        <Border Grid.Column="1" Background="#40182234" BorderBrush="#F59E0B" BorderThickness="1"
-                                CornerRadius="4" Padding="10,4"
-                                IsVisible="{Binding IsSimulatedFeed}">
-                          <TextBlock Text="[SIMULATED DEMO FEED]"
-                                     FontFamily="Consolas, Menlo, Monaco, monospace"
-                                     FontSize="12" FontWeight="Bold" Foreground="#FBBF24"/>
-                        </Border>
-                      </Grid>
-                    </Border>
+                      <!-- Top OSD HUD Bar -->
+                      <Border VerticalAlignment="Top" Background="#B3050912" Padding="18,10"
+                              IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <Grid ColumnDefinitions="*, Auto">
+                          <!-- Camera Title & Location -->
+                          <StackPanel Grid.Column="0" Spacing="2">
+                            <TextBlock Text="{Binding CameraOsdTag}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="16" FontWeight="Bold" Foreground="#FCD34D"/>
+                            <TextBlock Text="{Binding LocationOsdTag}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="12" Foreground="#94A3B8"/>
+                          </StackPanel>
 
-                  </Grid>
-                </Viewbox>
-              </Border>
+                          <!-- Right: Live Clock & Status Badge -->
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                            <!-- Recording / Live Indicator -->
+                            <Border Background="#1A2234" CornerRadius="4" Padding="8,4"
+                                    BorderBrush="#38BDF8" BorderThickness="1">
+                              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Fill="#10B981" IsVisible="{Binding IsStreaming}"/>
+                                <Ellipse Width="8" Height="8" Fill="#64748B" IsVisible="{Binding !IsStreaming}"/>
+                                <TextBlock Text="LIVE"
+                                           FontFamily="Consolas, Menlo, Monaco, monospace"
+                                           FontSize="12" FontWeight="Bold" Foreground="#10B981"
+                                           IsVisible="{Binding IsStreaming}"/>
+                                <TextBlock Text="STANDBY"
+                                           FontFamily="Consolas, Menlo, Monaco, monospace"
+                                           FontSize="12" FontWeight="Bold" Foreground="#94A3B8"
+                                           IsVisible="{Binding !IsStreaming}"/>
+                              </StackPanel>
+                            </Border>
 
-              <!-- Cell Footer Controls -->
-              <Grid Grid.Row="2" ColumnDefinitions="Auto, *, Auto" Margin="0,6,0,0">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Fps, StringFormat='FPS: {0:F1}'}" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
-                  <TextBlock Text="{Binding Resolution}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
-                </StackPanel>
+                            <!-- Dynamic Millisecond UTC Clock -->
+                            <TextBlock Text="{Binding LiveClockText}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="16" FontWeight="Bold" Foreground="#F8FAFC"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                  <Button Content="Start" Command="{Binding StartCommand}" IsVisible="{Binding !IsStreaming}" Classes="primary" Padding="10,4" FontSize="11"/>
-                  <Button Content="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsStreaming}" Classes="secondary" Padding="10,4" FontSize="11"/>
-                </StackPanel>
+                      <!-- Bottom OSD HUD Bar -->
+                      <Border VerticalAlignment="Bottom" Background="#B3050912" Padding="18,8"
+                              IsVisible="{Binding Device, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <Grid ColumnDefinitions="*, Auto">
+                          <!-- Bottom Left: Measured Telemetry -->
+                          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Fps, StringFormat='FPS: {0:F1}'}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="13" FontWeight="Bold" Foreground="#38BDF8"/>
+                            <TextBlock Text="{Binding Resolution, StringFormat='RES: {0}'}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="13" Foreground="#94A3B8"/>
+                            <TextBlock Text="{Binding ProtocolText, StringFormat='NET: {0}'}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="13" Foreground="#94A3B8"/>
+                            <TextBlock Text="{Binding FrameCount, StringFormat='FRAMES: {0:N0}'}"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="13" Foreground="#64748B"/>
+                          </StackPanel>
+
+                          <!-- Bottom Right: Simulated Demo Feed Watermark -->
+                          <Border Grid.Column="1" Background="#40182234" BorderBrush="#F59E0B" BorderThickness="1"
+                                  CornerRadius="4" Padding="10,4"
+                                  IsVisible="{Binding IsSimulatedFeed}">
+                            <TextBlock Text="[SIMULATED DEMO FEED]"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="12" FontWeight="Bold" Foreground="#FBBF24"/>
+                          </Border>
+                        </Grid>
+                      </Border>
+
+                    </Grid>
+                  </Viewbox>
+                </Border>
+
+                <!-- Cell Footer Controls -->
+                <Grid Grid.Row="2" ColumnDefinitions="Auto, *, Auto" Margin="0,6,0,0">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Fps, StringFormat='FPS: {0:F1}'}" FontSize="11" Foreground="{StaticResource CyanAccent}"/>
+                    <TextBlock Text="{Binding Resolution}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                  </StackPanel>
+
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                    <Button Content="Start" Command="{Binding StartCommand}" IsVisible="{Binding !IsStreaming}" Classes="primary" Padding="10,4" FontSize="11"/>
+                    <Button Content="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsStreaming}" Classes="secondary" Padding="10,4" FontSize="11"/>
+                  </StackPanel>
+                </Grid>
+
               </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
 
-            </Grid>
-          </Border>
-        </DataTemplate>
-      </ItemsControl.ItemTemplate>
-    </ItemsControl>
+    </Grid>
+
+    <!-- Quick Add Camera Modal Dialog Overlay -->
+    <Border Background="#B3050912" IsVisible="{Binding IsQuickAddDialogOpen}"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+      <Border Classes="card" Width="520" HorizontalAlignment="Center" VerticalAlignment="Center"
+              Padding="24" Background="{StaticResource SurfaceBackground}"
+              BorderBrush="{StaticResource SubtleBorder}" BorderThickness="1" CornerRadius="10">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Quick Add Camera" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+          <TextBlock Text="Add an ONVIF Profile S or direct RTSP stream camera directly to the monitoring view."
+                     FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+
+          <!-- Protocol Selection -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Protocol" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <ComboBox SelectedIndex="{Binding QuickAddProtocolIndex}" HorizontalAlignment="Stretch">
+              <ComboBoxItem Content="ONVIF (Profile S / T Discovery)"/>
+              <ComboBoxItem Content="Direct RTSP Stream URL"/>
+            </ComboBox>
+          </StackPanel>
+
+          <!-- Camera Name -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Camera Name" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <TextBox Text="{Binding QuickAddName}" Watermark="e.g. North Gate Camera"/>
+          </StackPanel>
+
+          <!-- Host or RTSP URL -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Host / IP or RTSP URL" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <TextBox Text="{Binding QuickAddHostOrUrl}" Watermark="192.168.1.100 or rtsp://192.168.1.100:554/live"/>
+          </StackPanel>
+
+          <!-- ONVIF Port & Path (Only for ONVIF) -->
+          <Grid ColumnDefinitions="*, *" IsVisible="{Binding IsQuickAddOnvif}">
+            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+              <TextBlock Text="Port" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <NumericUpDown Value="{Binding QuickAddPort}" Minimum="1" Maximum="65535" FormatString="0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0">
+              <TextBlock Text="Service Path" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <TextBox Text="{Binding QuickAddPath}"/>
+            </StackPanel>
+          </Grid>
+
+          <!-- RTSP Transport (Only for RTSP) -->
+          <StackPanel Spacing="4" IsVisible="{Binding IsQuickAddRtsp}">
+            <TextBlock Text="RTSP Transport" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <ComboBox SelectedValue="{Binding QuickAddRtspTransport}" SelectedValueBinding="{Binding Content}" HorizontalAlignment="Stretch">
+              <ComboBoxItem Content="tcp"/>
+              <ComboBoxItem Content="udp"/>
+            </ComboBox>
+          </StackPanel>
+
+          <!-- Credentials -->
+          <Grid ColumnDefinitions="*, *">
+            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+              <TextBlock Text="Username" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <TextBox Text="{Binding QuickAddUsername}" Watermark="admin"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0">
+              <TextBlock Text="Password" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+              <TextBox Text="{Binding QuickAddPassword}" PasswordChar="•" Watermark="••••••••"/>
+            </StackPanel>
+          </Grid>
+
+          <!-- Location -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Physical Location" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+            <TextBox Text="{Binding QuickAddLocation}" Watermark="Building A - Entrance"/>
+          </StackPanel>
+
+          <!-- Error display -->
+          <TextBlock Text="{Binding QuickAddError}" Foreground="{StaticResource RedDanger}"
+                     FontSize="12" TextWrapping="Wrap"
+                     IsVisible="{Binding QuickAddError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+          <!-- Action Buttons -->
+          <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Cancel" Command="{Binding CloseQuickAddDialogCommand}" Classes="secondary"/>
+            <Button Content="Add Camera" Command="{Binding SubmitQuickAddCameraCommand}"
+                    IsEnabled="{Binding !IsQuickAdding}" Classes="primary"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
 
   </Grid>
 

@@ -86,5 +86,44 @@ public class LiveCellViewModelTests
             Assert.NotNull(cell.CurrentBitmap);
         }
     }
+
+    [Fact]
+    public void ConnectionStatusBadge_And_BooleanProperties_ReflectStateAccurately()
+    {
+        var streamingService = new StreamingService(NullLoggerFactory.Instance);
+        var cameras = new ObservableCollection<CameraDevice>();
+        var cell = new LiveCellViewModel(streamingService, cameras);
+
+        // 1. Initial State (No camera)
+        Assert.Equal("NO CAMERA", cell.ConnectionStatusBadge);
+        Assert.False(cell.IsRealLiveFeed);
+        Assert.False(cell.IsConnecting);
+        Assert.False(cell.IsOffline);
+
+        // 2. Demo Device
+        var demo = new CameraDevice { DisplayName = "Demo Cam", IsDemoDevice = true, AuthState = AuthenticationState.Authenticated };
+        cell.Device = demo;
+        Assert.Equal("DEMO", cell.ConnectionStatusBadge);
+        Assert.True(cell.IsDemoDevice);
+        Assert.False(cell.IsRealLiveFeed);
+
+        // 3. Unauthenticated Device
+        var unauth = new CameraDevice { DisplayName = "Locked Cam", IsDemoDevice = false, AuthState = AuthenticationState.Unauthenticated };
+        cell.Device = unauth;
+        Assert.Equal("AUTHENTICATION REQUIRED", cell.ConnectionStatusBadge);
+        Assert.True(cell.IsUnauthenticated);
+        Assert.False(cell.IsRealLiveFeed);
+
+        // 4. Offline Device
+        var offline = new CameraDevice { DisplayName = "Offline Cam", IsDemoDevice = false, AuthState = AuthenticationState.Authenticated, ConnectionState = DeviceConnectionState.Unavailable };
+        cell.Device = offline;
+        Assert.Equal("OFFLINE", cell.ConnectionStatusBadge);
+        Assert.True(cell.IsOffline);
+
+        // 5. Custom Transport Badge
+        var udpCam = new CameraDevice { DisplayName = "UDP Cam", RtspTransport = "udp" };
+        cell.Device = udpCam;
+        Assert.Equal("RTSP/UDP", cell.TransportBadgeText);
+    }
 }
 
