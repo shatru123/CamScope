@@ -166,14 +166,56 @@ public static class DemoDataGenerator
                     "onvif://www.onvif.org/name/South_Parking_Lot",
                     "onvif://www.onvif.org/hardware/IPC-HFW5842E-Z4E"
                 ],
-                ConnectionState = DeviceConnectionState.Unavailable,
-                AuthState = AuthenticationState.Unauthenticated,
-                Capabilities = new DeviceCapabilities(),
+                ConnectionState = DeviceConnectionState.Connected,
+                AuthState = AuthenticationState.Authenticated,
+                Capabilities = new DeviceCapabilities
+                {
+                    LiveStreaming = CapabilityStatus.Supported,
+                    Ptz = CapabilityStatus.Unsupported,
+                    RecordingSearch = CapabilityStatus.Supported,
+                    Audio = CapabilityStatus.Supported,
+                    Analytics = CapabilityStatus.Supported
+                },
                 Protocol = CameraProtocolType.Simulated,
                 IsDemoDevice = true,
-                LastError = "Connection timeout after 5000ms: Host unreachable",
                 Location = "South Employee Parking",
-                Tags = ["Exterior", "Offline"]
+                Tags = ["Exterior", "Parking", "4K"],
+                RtspStreamUri = "rtsp://192.168.1.105:554/cam/realmonitor?channel=1&subtype=0"
+            },
+            new CameraDevice
+            {
+                Id = Guid.Parse("66666666-6666-6666-6666-666666666666"),
+                EndpointId = "urn:uuid:demo-sony-snc-vb770-001a2b3c4d5e",
+                DisplayName = "[DEMO] Corporate Reception Lobby",
+                Vendor = "Sony Security",
+                Model = "SNC-VB770",
+                FirmwareVersion = "1.8.0",
+                SerialNumber = "SONY770VB991122",
+                Host = "192.168.1.106",
+                Port = 80,
+                PrimaryServiceAddress = "http://192.168.1.106/onvif/device_service",
+                ServiceAddresses = ["http://192.168.1.106/onvif/device_service"],
+                Scopes =
+                [
+                    "onvif://www.onvif.org/name/Corporate_Reception",
+                    "onvif://www.onvif.org/hardware/SNC-VB770",
+                    "onvif://www.onvif.org/location/Main_Lobby"
+                ],
+                ConnectionState = DeviceConnectionState.Connected,
+                AuthState = AuthenticationState.Authenticated,
+                Capabilities = new DeviceCapabilities
+                {
+                    LiveStreaming = CapabilityStatus.Supported,
+                    Ptz = CapabilityStatus.Unsupported,
+                    RecordingSearch = CapabilityStatus.Supported,
+                    Audio = CapabilityStatus.Supported,
+                    Analytics = CapabilityStatus.Supported
+                },
+                Protocol = CameraProtocolType.Simulated,
+                IsDemoDevice = true,
+                Location = "Headquarters - Reception Lobby",
+                Tags = ["Interior", "Lobby", "Reception"],
+                RtspStreamUri = "rtsp://192.168.1.106:554/live/media"
             }
         ];
     }

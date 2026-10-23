@@ -62,11 +62,20 @@ CamScope is a cross-platform desktop application designed for security operators
   - Interactive playback timeline bar with playhead scrubber, play, pause, and time readout.
   - **Honest capability handling**: clearly informs the user when a camera does not expose the ONVIF Recording Search service.
 
-- **Evaluation & Demonstration Mode**
-  - Toggleable Demo Mode for evaluating the full UI workflow without physical cameras.
-  - Generates realistic synthetic devices (Axis, Hanwha, Hikvision, Bosch, Dahua) clearly marked with `[DEMO]`.
-  - Produces pure C# synthetic test frames strictly when `device.IsDemoDevice == true`.
-  - Demo streaming is strictly isolated from real-device execution.
+- **Realistic CCTV Demo Mode Upgrade & Offline Video Pipeline**
+  - **Authentic Continuous CCTV Footage**: Upgrades static procedural drawings to smooth, photorealistic 720p H.264 offline video footage looping continuously at 25 fps via uncompressed BMP pipes.
+  - **Bundled Offline Camera Scenes**: Includes dedicated surveillance clips for all demo cameras:
+    - *Front Entrance Dome* (`cctv_front_entrance.mp4`): Pedestrian vestibule traffic and daylight surveillance.
+    - *Loading Dock PTZ* (`cctv_loading_dock.mp4`): Industrial warehouse logistics, forklift backing with flashing beacon.
+    - *Server Room Fixed* (`cctv_server_room.mp4`): Datacenter server rack aisle with flashing LED activity.
+    - *Perimeter Fence Thermal* (`cctv_perimeter_fence_thermal.mp4`): High-contrast FLIR thermal camera with moving heat signatures.
+    - *Parking Lot 4K Bullet* (`cctv_parking_lot.mp4`): Exterior commercial parking facility with sedan movement.
+    - *Corporate Reception Lobby* (`cctv_reception_lobby.mp4`): Executive lobby visitor reception.
+  - **Clean Architecture & Explicit Endpoint Mapping**: Implements `IDemoVideoPlaybackService` and `DemoCameraAssetCatalog` keying on exact `EndpointId` URNs rather than brittle substring matching.
+  - **Dynamic Tactical CCTV OSD**: Renders live millisecond UTC clock (`yyyy-MM-dd HH:mm:ss.fff UTC`), camera title & location tags, true measured stream FPS and resolution, optical reticle crosshairs, and a persistent `[SIMULATED DEMO FEED]` watermark.
+  - **Unauthenticated Camera Behavior**: Camera 4 (Perimeter Fence Thermal) demonstrates genuine unauthenticated/locked state requiring ONVIF credentials before streaming.
+  - **Historical Archive Replay**: Replaying recorded segments in Recordings & Playback displays genuine video playback stamped with `PRE-RECORDED ARCHIVE [DEMO]`.
+  - **Strict Offline Guarantee**: 100% offline playback using bundled local assets; never opens external network sockets in demo mode.
 
 - **Network Explorer & App-Scoped Interface Binding**
   - **Primary Internet Protection**: CamScope binds discovery and streaming strictly at the application socket level (`Socket.Bind` to interface IP and `SocketOptionName.MulticastInterface`). Your Mac's default gateway, system routes, DNS, and primary internet connectivity remain 100% untouched and unmodified.

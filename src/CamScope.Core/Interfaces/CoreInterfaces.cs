@@ -64,6 +64,24 @@ public interface IStreamingService
     IStreamingSession CreateSession(CameraDevice device, string? username = null, string? password = null);
 }
 
+public record DemoCameraAssetMapping(
+    string EndpointId,
+    string DisplayName,
+    string Location,
+    string VideoFileName,
+    string PosterFileName,
+    int TargetFps = 25,
+    string Resolution = "1280x720");
+
+public interface IDemoVideoPlaybackService
+{
+    bool IsDemoDevice(CameraDevice device);
+    DemoCameraAssetMapping? GetMapping(CameraDevice device);
+    string? ResolveVideoPath(CameraDevice device);
+    string? ResolvePosterPath(CameraDevice device);
+    IStreamingSession CreateDemoSession(CameraDevice device);
+}
+
 public record DeviceInformationResult(
     string Manufacturer,
     string Model,

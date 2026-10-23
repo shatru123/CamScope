@@ -1,9 +1,13 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
+using CamScope.Application.Services;
 using CamScope.Core.Enums;
 using CamScope.Core.Interfaces;
 using CamScope.Core.Models;
+using CamScope.Streaming.Demo;
 using CamScope.Streaming.Rendering;
+using CamScope.Streaming.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -12,6 +16,7 @@ namespace CamScope.App.ViewModels;
 public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly IStreamingService _streamingService;
+    private readonly DispatcherTimer? _clockTimer;
     private IStreamingSession? _session;
     private int _isUpdatingFrame;
     private bool _isDisposed;
@@ -22,10 +27,19 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private Bitmap? _currentBitmap;
     [ObservableProperty] private double _fps;
     [ObservableProperty] private int _frameCount;
-    [ObservableProperty] private string _resolution = "1920x1080";
+    [ObservableProperty] private string _resolution = "1280x720";
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private bool _isStreaming;
     [ObservableProperty] private bool _isFullscreen;
+
+    // Tactical CCTV OSD Properties
+    [ObservableProperty] private string _cameraOsdTag = "";
+    [ObservableProperty] private string _locationOsdTag = "";
+    [ObservableProperty] private string _liveClockText = "";
+    [ObservableProperty] private string _protocolText = "SIMULATED / DEMO";
+    [ObservableProperty] private bool _isDemoDevice;
+    [ObservableProperty] private bool _isUnauthenticated;
+    [ObservableProperty] private bool _isSimulatedFeed;
 
     public ObservableCollection<CameraDevice> AvailableCameras { get; }
 
@@ -33,6 +47,21 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
     {
         _streamingService = streamingService;
         AvailableCameras = availableCameras;
+
+        LiveClockText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff UTC");
+
+        if (Avalonia.Application.Current != null)
+        {
+            _clockTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(50)
+            };
+            _clockTimer.Tick += (_, _) =>
+            {
+                LiveClockText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff UTC");
+            };
+            _clockTimer.Start();
+        }
     }
 
     partial void OnDeviceChanged(CameraDevice? oldValue, CameraDevice? newValue)
@@ -41,27 +70,67 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         {
             _ = StopAsync();
         }
+
         ErrorMessage = null;
+
         if (newValue != null)
         {
+            CameraOsdTag = $"[CAM - {newValue.DisplayName.ToUpperInvariant()}]";
+            LocationOsdTag = !string.IsNullOrWhiteSpace(newValue.Location) ? $"LOC: {newValue.Location.ToUpperInvariant()}" : "LOC: UNASSIGNED";
+            ProtocolText = newValue.IsDemoDevice ? "ONVIF PROFILE S [DEMO]" : (newValue.Protocol.ToString().ToUpperInvariant() + " / RTSP");
+            IsDemoDevice = newValue.IsDemoDevice;
+            IsUnauthenticated = newValue.AuthState == AuthenticationState.Unauthenticated;
+            IsSimulatedFeed = newValue.IsDemoDevice;
+
             StatusText = newValue.AuthState == AuthenticationState.Authenticated
                 ? (newValue.IsDemoDevice ? "Sample preview active - Click Start to stream" : "Ready to stream")
                 : "Camera must be authenticated before viewing live stream";
 
-            if (newValue.IsDemoDevice && !IsStreaming)
+            if (newValue.IsDemoDevice && !IsStreaming && Avalonia.Application.Current != null)
             {
-                var frameBytes = SyntheticFrameGenerator.GenerateBmpFrame(newValue.DisplayName, newValue.Host, 0);
-                using var ms = new MemoryStream(frameBytes);
-                var old = CurrentBitmap;
-                CurrentBitmap = new Bitmap(ms);
-                old?.Dispose();
+                LoadPosterFrame(newValue);
             }
         }
         else
         {
+            CameraOsdTag = "";
+            LocationOsdTag = "";
+            ProtocolText = "SIMULATED / DEMO";
+            IsDemoDevice = false;
+            IsUnauthenticated = false;
+            IsSimulatedFeed = false;
             StatusText = "Idle - Select an authenticated camera";
             CurrentBitmap?.Dispose();
             CurrentBitmap = null;
+        }
+    }
+
+    private void LoadPosterFrame(CameraDevice device)
+    {
+        try
+        {
+            var mapping = DemoCameraAssetCatalog.ResolveForDevice(device);
+            var posterPath = DemoVideoPlaybackSession.ResolvePosterFilePath(mapping.PosterFileName);
+
+            if (posterPath != null && File.Exists(posterPath))
+            {
+                using var fs = File.OpenRead(posterPath);
+                var old = CurrentBitmap;
+                CurrentBitmap = new Bitmap(fs);
+                old?.Dispose();
+                Resolution = mapping.Resolution;
+                return;
+            }
+
+            var frameBytes = SyntheticFrameGenerator.GenerateBmpFrame(device.DisplayName, device.Host, 0);
+            using var ms = new MemoryStream(frameBytes);
+            var oldBmp = CurrentBitmap;
+            CurrentBitmap = new Bitmap(ms);
+            oldBmp?.Dispose();
+        }
+        catch
+        {
+            // Headless test runner fallback
         }
     }
 
@@ -70,9 +139,12 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
     {
         if (_isDisposed) return;
         if (Device == null) return;
+
         if (Device.AuthState != AuthenticationState.Authenticated)
         {
             ErrorMessage = "Device must be authenticated before viewing live stream.";
+            StatusText = "Authentication required";
+            State = StreamState.Error;
             return;
         }
 
@@ -103,13 +175,9 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         State = StreamState.Idle;
         StatusText = "Stream stopped.";
 
-        if (Device != null && Device.IsDemoDevice)
+        if (Device != null && Device.IsDemoDevice && Avalonia.Application.Current != null)
         {
-            var frameBytes = SyntheticFrameGenerator.GenerateBmpFrame(Device.DisplayName, Device.Host, 0);
-            using var ms = new MemoryStream(frameBytes);
-            var old = CurrentBitmap;
-            CurrentBitmap = new Bitmap(ms);
-            old?.Dispose();
+            LoadPosterFrame(Device);
         }
         else
         {
@@ -133,7 +201,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
             using var ms = new MemoryStream(bmpBytes);
             var bmp = new Bitmap(ms);
 
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            Dispatcher.UIThread.Post(() =>
             {
                 try
                 {
@@ -173,7 +241,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
     {
         if (_isDisposed) return;
 
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        Dispatcher.UIThread.Post(() =>
         {
             if (_isDisposed) return;
 
@@ -192,6 +260,7 @@ public sealed partial class LiveCellViewModel : ViewModelBase, IAsyncDisposable
         if (_isDisposed) return;
         _isDisposed = true;
 
+        _clockTimer?.Stop();
         await StopAsync();
     }
 }
@@ -200,6 +269,7 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
 {
     private readonly IDeviceRepository _deviceRepository;
     private readonly IStreamingService _streamingService;
+    private readonly Func<bool>? _isDemoModeFunc;
 
     [ObservableProperty] private int _gridLayout = 4; // 1, 4, 9
     [ObservableProperty] private int _gridColumns = 2;
@@ -208,13 +278,16 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
 
     public ObservableCollection<LiveCellViewModel> Cells { get; } = [];
     public ObservableCollection<CameraDevice> AuthenticatedCameras { get; } = [];
+    public ObservableCollection<CameraDevice> AvailableCameras { get; } = [];
 
     public LiveMonitoringViewModel(
         IDeviceRepository deviceRepository,
-        IStreamingService streamingService)
+        IStreamingService streamingService,
+        Func<bool>? isDemoModeFunc = null)
     {
         _deviceRepository = deviceRepository;
         _streamingService = streamingService;
+        _isDemoModeFunc = isDemoModeFunc;
 
         SetLayout(4); // Default to 2x2 grid
     }
@@ -223,19 +296,49 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
     public async Task LoadCamerasAsync()
     {
         var all = await _deviceRepository.GetAllAsync();
-        AuthenticatedCameras.Clear();
-        foreach (var dev in all.Where(d => d.AuthState == AuthenticationState.Authenticated))
+        bool isDemo = _isDemoModeFunc?.Invoke() ?? true;
+
+        // In demo mode or if repo has no authenticated demo devices, seed standard demo cameras
+        if (isDemo && (all.Count == 0 || !all.Any(d => d.IsDemoDevice && d.AuthState == AuthenticationState.Authenticated)))
         {
-            AuthenticatedCameras.Add(dev);
+            foreach (var demo in DemoDataGenerator.CreateDemoDevices())
+            {
+                await _deviceRepository.AddOrUpdateAsync(demo);
+            }
+            all = await _deviceRepository.GetAllAsync();
+        }
+
+        AuthenticatedCameras.Clear();
+        AvailableCameras.Clear();
+
+        foreach (var dev in all)
+        {
+            AvailableCameras.Add(dev);
+            if (dev.AuthState == AuthenticationState.Authenticated)
+            {
+                AuthenticatedCameras.Add(dev);
+            }
         }
 
         // Auto-assign authenticated cameras to unassigned cells
         var authList = AuthenticatedCameras.ToList();
         for (int i = 0; i < Cells.Count && i < authList.Count; i++)
         {
-            if (Cells[i].Device == null)
+            if (Cells[i].Device == null || !authList.Contains(Cells[i].Device!))
             {
                 Cells[i].Device = authList[i];
+            }
+        }
+
+        // In Demo Mode, auto-start all assigned cells so the user immediately sees live video streams
+        if (isDemo)
+        {
+            foreach (var cell in Cells)
+            {
+                if (cell.Device != null && !cell.IsStreaming && cell.Device.AuthState == AuthenticationState.Authenticated)
+                {
+                    _ = cell.StartAsync();
+                }
             }
         }
     }
@@ -262,7 +365,7 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
 
         while (Cells.Count < cellCount)
         {
-            var cell = new LiveCellViewModel(_streamingService, AuthenticatedCameras);
+            var cell = new LiveCellViewModel(_streamingService, AvailableCameras);
             Cells.Add(cell);
         }
         while (Cells.Count > cellCount)
@@ -271,6 +374,20 @@ public sealed partial class LiveMonitoringViewModel : ViewModelBase, IAsyncDispo
             Cells.RemoveAt(Cells.Count - 1);
             _ = cell.DisposeAsync();
         }
+
+        var authList = AuthenticatedCameras.ToList();
+        for (int i = 0; i < Cells.Count && i < authList.Count; i++)
+        {
+            if (Cells[i].Device == null)
+            {
+                Cells[i].Device = authList[i];
+                if ((_isDemoModeFunc?.Invoke() ?? false) && !Cells[i].IsStreaming && Cells[i].Device?.AuthState == AuthenticationState.Authenticated)
+                {
+                    _ = Cells[i].StartAsync();
+                }
+            }
+        }
+
         SelectedCell = Cells.FirstOrDefault();
     }
 

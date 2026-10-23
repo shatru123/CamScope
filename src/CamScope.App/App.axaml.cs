@@ -16,6 +16,7 @@ using CamScope.Persistence;
 using CamScope.Persistence.Repositories;
 using CamScope.Persistence.Services;
 using CamScope.Streaming;
+using CamScope.Streaming.Demo;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -128,7 +129,8 @@ public partial class App : Avalonia.Application
         services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
         services.AddSingleton<IOnvifClient, OnvifDeviceClient>();
 
-        // Streaming Service
+        // Streaming & Demo Playback Services
+        services.AddSingleton<IDemoVideoPlaybackService, DemoVideoPlaybackService>();
         services.AddSingleton<IStreamingService, StreamingService>();
 
         // Application Services
@@ -157,12 +159,16 @@ public partial class App : Avalonia.Application
             sp.GetRequiredService<DeviceManagementService>(),
             () => isDemoModeHolder.IsDemoMode));
 
-        services.AddSingleton<LiveMonitoringViewModel>();
+        services.AddSingleton<LiveMonitoringViewModel>(sp => new LiveMonitoringViewModel(
+            sp.GetRequiredService<IDeviceRepository>(),
+            sp.GetRequiredService<IStreamingService>(),
+            () => isDemoModeHolder.IsDemoMode));
         services.AddSingleton<RecordingsViewModel>(sp => new RecordingsViewModel(
             sp.GetRequiredService<IDeviceRepository>(),
             sp.GetRequiredService<IOnvifClient>(),
             sp.GetRequiredService<ICredentialStore>(),
-            () => isDemoModeHolder.IsDemoMode));
+            () => isDemoModeHolder.IsDemoMode,
+            sp.GetRequiredService<IStreamingService>()));
 
         services.AddSingleton<NetworkExplorerViewModel>();
         services.AddSingleton<WifiSecurityViewModel>();
@@ -192,7 +198,8 @@ public partial class App : Avalonia.Application
             sp.GetRequiredService<AuditLogViewModel>(),
             sp.GetRequiredService<SettingsViewModel>(),
             sp.GetRequiredService<ISettingsService>(),
-            sp.GetRequiredService<INetworkSelectionService>()));
+            sp.GetRequiredService<INetworkSelectionService>(),
+            isDemoModeHolder));
     }
 }
 

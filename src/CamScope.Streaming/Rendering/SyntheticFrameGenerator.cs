@@ -1,8 +1,54 @@
+using System.Reflection;
+
 namespace CamScope.Streaming.Rendering;
 
 public static class SyntheticFrameGenerator
 {
     private const int HeaderSize = 54;
+    private const int StandardWidth = 640;
+    private const int StandardHeight = 360;
+    private const int StandardImageSize = StandardWidth * StandardHeight * 3; // 24bpp (691,200 bytes)
+    private const int StandardFileSize = HeaderSize + StandardImageSize; // 691,254 bytes
+
+    private static readonly Dictionary<string, byte[]> CachedScenes = new(StringComparer.OrdinalIgnoreCase);
+
+    static SyntheticFrameGenerator()
+    {
+        LoadAllScenes();
+    }
+
+    private static void LoadAllScenes()
+    {
+        var asm = typeof(SyntheticFrameGenerator).Assembly;
+        var names = asm.GetManifestResourceNames();
+
+        LoadScene(asm, names, "entrance", "cctv_front_entrance.bmp");
+        LoadScene(asm, names, "dock", "cctv_loading_dock.bmp");
+        LoadScene(asm, names, "server", "cctv_server_room.bmp");
+        LoadScene(asm, names, "reception", "cctv_reception_lobby.bmp");
+        LoadScene(asm, names, "parking", "cctv_parking_lot.bmp");
+        LoadScene(asm, names, "thermal", "cctv_perimeter_fence_thermal.bmp");
+    }
+
+    private static void LoadScene(Assembly asm, string[] allResourceNames, string key, string filename)
+    {
+        try
+        {
+            var match = allResourceNames.FirstOrDefault(n => n.EndsWith(filename, StringComparison.OrdinalIgnoreCase));
+            if (match == null) return;
+
+            using var stream = asm.GetManifestResourceStream(match);
+            if (stream == null) return;
+
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            CachedScenes[key] = ms.ToArray();
+        }
+        catch
+        {
+            // Silently fall back to procedural rendering if loading fails
+        }
+    }
 
     public static byte[] GenerateBmpFrame(
         string cameraName,
@@ -11,84 +57,94 @@ public static class SyntheticFrameGenerator
         int width = 640,
         int height = 360)
     {
-        var rowSize = width * 4;
-        var imageSize = rowSize * height;
-        var fileSize = HeaderSize + imageSize;
-
-        var buffer = new byte[fileSize];
-
-        // 1. BMP Header
-        buffer[0] = 0x42; // 'B'
-        buffer[1] = 0x4D; // 'M'
-        WriteInt32(buffer, 2, fileSize);
-        WriteInt32(buffer, 6, 0); // Reserved
-        WriteInt32(buffer, 10, HeaderSize); // Offset to pixels
-
-        // 2. DIB Header (BITMAPINFOHEADER)
-        WriteInt32(buffer, 14, 40); // Header size
-        WriteInt32(buffer, 18, width);
-        WriteInt32(buffer, 22, -height); // Top-down
-        WriteInt16(buffer, 26, 1); // Color planes
-        WriteInt16(buffer, 28, 32); // 32 bits per pixel (BGRA)
-        WriteInt32(buffer, 30, 0); // BI_RGB (uncompressed)
-        WriteInt32(buffer, 34, imageSize);
-        WriteInt32(buffer, 38, 2835); // Horizontal resolution
-        WriteInt32(buffer, 42, 2835); // Vertical resolution
-        WriteInt32(buffer, 46, 0); // Colors in palette
-        WriteInt32(buffer, 50, 0); // Important colors
-
-        // 3. Render Camera-Specific Realistic Surveillance Scene
         var lowerName = cameraName.ToLowerInvariant();
-        if (lowerName.Contains("entrance") || lowerName.Contains("dome") || lowerName.Contains("front"))
+        string sceneKey = "entrance";
+
+        if (lowerName.Contains("dock") || lowerName.Contains("loading") || lowerName.Contains("ptz"))
         {
-            RenderFrontEntranceScene(buffer, width, height, frameNumber);
+            sceneKey = "dock";
         }
-        else if (lowerName.Contains("dock") || lowerName.Contains("loading") || lowerName.Contains("ptz"))
+        else if (lowerName.Contains("server") || lowerName.Contains("room") || lowerName.Contains("datacenter"))
         {
-            RenderLoadingDockScene(buffer, width, height, frameNumber);
+            sceneKey = "server";
         }
-        else if (lowerName.Contains("server") || lowerName.Contains("room"))
+        else if (lowerName.Contains("reception") || lowerName.Contains("lobby") || lowerName.Contains("panoramic"))
         {
-            RenderServerRoomScene(buffer, width, height, frameNumber);
-        }
-        else if (lowerName.Contains("reception") || lowerName.Contains("panoramic") || lowerName.Contains("lobby"))
-        {
-            RenderReceptionScene(buffer, width, height, frameNumber);
+            sceneKey = "reception";
         }
         else if (lowerName.Contains("parking") || lowerName.Contains("lot") || lowerName.Contains("bullet"))
         {
-            RenderParkingLotScene(buffer, width, height, frameNumber);
+            sceneKey = "parking";
+        }
+        else if (lowerName.Contains("thermal") || lowerName.Contains("perimeter") || lowerName.Contains("fence"))
+        {
+            sceneKey = "thermal";
+        }
+
+        byte[] buffer;
+        if (width == StandardWidth && height == StandardHeight && CachedScenes.TryGetValue(sceneKey, out var baseBytes) && baseBytes.Length == StandardFileSize)
+        {
+            buffer = new byte[StandardFileSize];
+            Buffer.BlockCopy(baseBytes, 0, buffer, 0, StandardFileSize);
         }
         else
         {
-            RenderDefaultSurveillanceScene(buffer, width, height, frameNumber);
+            var rowSize = width * 3;
+            var imageSize = rowSize * height;
+            var fileSize = HeaderSize + imageSize;
+            buffer = new byte[fileSize];
+
+            // 1. BMP Header
+            buffer[0] = 0x42; // 'B'
+            buffer[1] = 0x4D; // 'M'
+            WriteInt32(buffer, 2, fileSize);
+            WriteInt32(buffer, 6, 0); // Reserved
+            WriteInt32(buffer, 10, HeaderSize); // Offset to pixels
+
+            // 2. DIB Header (BITMAPINFOHEADER)
+            WriteInt32(buffer, 14, 40); // Header size
+            WriteInt32(buffer, 18, width);
+            WriteInt32(buffer, 22, -height); // Top-down
+            WriteInt16(buffer, 26, 1); // Planes
+            WriteInt16(buffer, 28, 24); // 24 bits per pixel (BGR)
+            WriteInt32(buffer, 30, 0); // BI_RGB (uncompressed)
+            WriteInt32(buffer, 34, imageSize);
+            WriteInt32(buffer, 38, 2835); // Horizontal resolution
+            WriteInt32(buffer, 42, 2835); // Vertical resolution
+            WriteInt32(buffer, 46, 0);
+            WriteInt32(buffer, 50, 0);
+
+            RenderFallbackProceduralScene(buffer, width, height, sceneKey, frameNumber);
         }
 
-        // 4. Common Professional CCTV Telemetry / On-Screen Display (OSD)
+        // 3. Render Dynamic AI Object Detection Bounding Boxes & Scene Tracking
+        RenderSceneTrackingOverlay(buffer, width, height, sceneKey, frameNumber);
 
-        // Subtle camera scanline effect
+        // 4. Subtle CCTV Scanline Effect
         for (int y = 0; y < height; y += 4)
         {
-            var rowOffset = HeaderSize + (y * width) * 4;
+            var rowOffset = HeaderSize + (y * width) * 3;
             for (int x = 0; x < width; x++)
             {
-                var idx = rowOffset + x * 4;
-                buffer[idx] = (byte)(buffer[idx] * 0.88);
-                buffer[idx + 1] = (byte)(buffer[idx + 1] * 0.88);
-                buffer[idx + 2] = (byte)(buffer[idx + 2] * 0.88);
+                var idx = rowOffset + x * 3;
+                buffer[idx] = (byte)(buffer[idx] * 0.90);
+                buffer[idx + 1] = (byte)(buffer[idx + 1] * 0.90);
+                buffer[idx + 2] = (byte)(buffer[idx + 2] * 0.90);
             }
         }
 
+        // 5. Common Professional CCTV Telemetry / On-Screen Display (OSD)
+
         // Top translucent OSD bar
-        DrawFilledRect(buffer, width, height, 0, 0, width, 44, 20, 15, 10);
+        DrawTranslucentRect(buffer, width, height, 0, 0, width, 44, 15, 12, 10, 0.65);
         DrawHLine(buffer, width, height, 0, 44, width, 55, 45, 30);
 
-        // Header overlay: Camera Name & Vendor / IP
-        DrawString(buffer, width, height, 16, 10, cameraName.ToUpperInvariant(), 220, 180, 20);
-        DrawString(buffer, width, height, 16, 24, $"{host} | ONVIF H.264 | 1080P @ 25FPS", 180, 180, 180);
+        // Header overlay: Camera Name & Profile parameters
+        DrawString(buffer, width, height, 16, 10, cameraName.ToUpperInvariant(), 230, 190, 40);
+        DrawString(buffer, width, height, 16, 25, $"{host} | ONVIF PROFILE S | 1080P @ 25FPS", 190, 190, 190);
 
-        // UTC Timestamp top-right
-        var timeStr = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC");
+        // Live UTC Timestamp (with millisecond precision)
+        var timeStr = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff UTC");
         DrawString(buffer, width, height, width - (timeStr.Length * 8) - 16, 10, timeStr, 255, 255, 255);
 
         // Recording indicator: Pulsing red dot with "REC [DEMO]"
@@ -111,264 +167,98 @@ public static class SyntheticFrameGenerator
         DrawVLine(buffer, width, height, cx, cy - 14, 28, 120, 120, 120);
 
         // Bottom translucent OSD bar
-        DrawFilledRect(buffer, width, height, 0, height - 32, width, 32, 20, 15, 10);
-        DrawHLine(buffer, width, height, 0, height - 32, width, 55, 45, 30);
+        DrawTranslucentRect(buffer, width, height, 0, height - 30, width, 30, 15, 12, 10, 0.65);
+        DrawHLine(buffer, width, height, 0, height - 30, width, 55, 45, 30);
 
         // Bottom status string
         var statusStr = $"FRAME: {frameNumber:D6} | BITRATE: ~4120 KBPS | LOSS: 0.0%";
-        DrawString(buffer, width, height, 16, height - 20, statusStr, 170, 170, 170);
+        DrawString(buffer, width, height, 16, height - 20, statusStr, 175, 175, 175);
 
         // Bottom-right watermark
-        DrawString(buffer, width, height, width - 210, height - 20, "CAMSCOPE SURVEILLANCE", 140, 120, 80);
+        DrawString(buffer, width, height, width - 210, height - 20, "CAMSCOPE SURVEILLANCE", 150, 130, 80);
 
         return buffer;
     }
 
-    #region Scene Renderers
+    #region Scene Tracking Overlay
 
-    private static void RenderFrontEntranceScene(byte[] buf, int width, int height, long frameNumber)
+    private static void RenderSceneTrackingOverlay(byte[] buf, int width, int height, string sceneKey, long frameNumber)
     {
-        // 1. Sky & Exterior Building Facade
-        DrawFilledRect(buf, width, height, 0, 0, width, 140, 60, 45, 35);
-        DrawFilledRect(buf, width, height, 60, 20, width - 120, 50, 95, 75, 45);
-
-        // 2. Concrete Plaza Flooring
-        DrawFilledRect(buf, width, height, 0, 140, width, height - 140, 32, 28, 24);
-
-        // Plaza pavement grid lines
-        for (int py = 160; py < height - 32; py += 30)
+        switch (sceneKey)
         {
-            DrawHLine(buf, width, height, 0, py, width, 48, 42, 36);
+            case "entrance":
+                // Moving pedestrian tracking box
+                double tEnt = (frameNumber % 160) / 160.0;
+                int walkX = (int)(130 + Math.Sin(tEnt * Math.PI * 2) * 110);
+                int walkY = 165;
+                DrawRect(buf, width, height, walkX, walkY, 46, 76, 20, 220, 80);
+                DrawString(buf, width, height, walkX, walkY - 12, "PERSON [98%]", 20, 220, 80);
+                break;
+
+            case "dock":
+                // Moving forklift / logistics tracking box
+                double tDock = (frameNumber % 180) / 180.0;
+                int dockX = (int)(230 + Math.Sin(tDock * Math.PI * 2) * 90);
+                int dockY = 190;
+                DrawRect(buf, width, height, dockX, dockY, 84, 56, 20, 180, 245);
+                DrawString(buf, width, height, dockX, dockY - 12, "FORKLIFT [95%]", 20, 180, 245);
+                break;
+
+            case "server":
+                // Datacenter security perimeter & telemetry
+                int aisleX = 210;
+                int aisleY = 110;
+                DrawRect(buf, width, height, aisleX, aisleY, 220, 85, 230, 160, 30);
+                DrawString(buf, width, height, aisleX + 12, aisleY + 16, "ZONE SECURE: NO MOTION", 230, 160, 30);
+                DrawString(buf, width, height, aisleX + 12, aisleY + 36, "TEMP: 19.4 C | HUMID: 42%", 180, 180, 180);
+                DrawString(buf, width, height, aisleX + 12, aisleY + 56, "AIRFLOW: OPTIMAL (CRAC-1)", 40, 210, 50);
+
+                // Blinking rack status LEDs
+                for (int ry = 70; ry < 220; ry += 16)
+                {
+                    bool led1 = (frameNumber + ry) % 7 != 0;
+                    bool led2 = (frameNumber / 2 + ry) % 5 == 0;
+                    if (led1) SetPixel(buf, width, height, 130, ry, 30, 230, 40);
+                    if (led2) SetPixel(buf, width, height, 138, ry, 230, 160, 20);
+
+                    bool rled1 = (frameNumber + ry * 2) % 6 != 0;
+                    bool rled2 = (frameNumber / 3 + ry) % 4 == 0;
+                    if (rled1) SetPixel(buf, width, height, width - 138, ry, 30, 230, 40);
+                    if (rled2) SetPixel(buf, width, height, width - 130, ry, 20, 180, 240);
+                }
+                break;
+
+            case "reception":
+                // Lobby visitor tracking box
+                double tRec = (frameNumber % 150) / 150.0;
+                int recX = (int)(230 + Math.Sin(tRec * Math.PI * 2) * 75);
+                int recY = 160;
+                DrawRect(buf, width, height, recX, recY, 50, 72, 230, 180, 30);
+                DrawString(buf, width, height, recX, recY - 12, "VISITOR [96%]", 230, 180, 30);
+                break;
+
+            case "parking":
+                // Moving car tracking box
+                int carX = (int)(40 + ((frameNumber * 4) % 460));
+                int carY = 210;
+                DrawRect(buf, width, height, carX, carY, 95, 54, 20, 150, 245);
+                DrawString(buf, width, height, carX, carY - 12, "CAR [94%] 22MPH", 20, 150, 245);
+                break;
+
+            case "thermal":
+                // Thermal signature intruder tracking box
+                double tTherm = (frameNumber % 140) / 140.0;
+                int thermX = (int)(180 + Math.Sin(tTherm * Math.PI * 2) * 80);
+                int thermY = 200;
+                DrawRect(buf, width, height, thermX, thermY, 36, 68, 255, 255, 255);
+                DrawString(buf, width, height, thermX, thermY - 12, "HEAT SIG [99%]", 255, 255, 255);
+                break;
         }
-        for (int px = 40; px < width; px += 70)
-        {
-            for (int py = 140; py < height - 32; py++)
-            {
-                SetPixel(buf, width, height, px + (py - 140) / 4, py, 48, 42, 36);
-            }
-        }
-
-        // 3. Central Double Glass Entrance Doors
-        int doorX = 220;
-        int doorY = 70;
-        int doorW = 200;
-        int doorH = 150;
-        DrawFilledRect(buf, width, height, doorX, doorY, doorW, doorH, 70, 55, 40);
-        DrawRect(buf, width, height, doorX, doorY, doorW, doorH, 140, 130, 110);
-        DrawVLine(buf, width, height, doorX + doorW / 2, doorY, doorH, 140, 130, 110);
-
-        // Door handles
-        DrawVLine(buf, width, height, doorX + doorW / 2 - 8, doorY + 60, 30, 200, 200, 200);
-        DrawVLine(buf, width, height, doorX + doorW / 2 + 8, doorY + 60, 30, 200, 200, 200);
-
-        // Entrance welcome mat
-        DrawFilledRect(buf, width, height, doorX - 10, doorY + doorH, doorW + 20, 26, 18, 16, 14);
-
-        // 4. Structural Columns Left & Right
-        DrawFilledRect(buf, width, height, 90, 50, 40, 170, 75, 68, 60);
-        DrawRect(buf, width, height, 90, 50, 40, 170, 95, 88, 80);
-        DrawFilledRect(buf, width, height, 510, 50, 40, 170, 75, 68, 60);
-        DrawRect(buf, width, height, 510, 50, 40, 170, 95, 88, 80);
-
-        // 5. Motion Tracking Box
-        var t = (frameNumber % 160) / 160.0;
-        int walkX = (int)(110 + t * 400);
-        int walkY = 170;
-        DrawRect(buf, width, height, walkX, walkY, 44, 76, 20, 220, 80);
-        DrawString(buf, width, height, walkX, walkY - 12, "PERSON [98%]", 20, 220, 80);
     }
 
-    private static void RenderLoadingDockScene(byte[] buf, int width, int height, long frameNumber)
+    private static void RenderFallbackProceduralScene(byte[] buf, int width, int height, string sceneKey, long frameNumber)
     {
-        // 1. Industrial Concrete Warehouse Wall
-        DrawFilledRect(buf, width, height, 0, 0, width, 180, 40, 32, 26);
-
-        // 2. Loading Bay 03 and Bay 04 Roll-up Overhead Doors
-        int bay1X = 60, bayW = 220, bayH = 150, bayY = 30;
-        int bay2X = 360;
-
-        // Bay 03
-        DrawFilledRect(buf, width, height, bay1X, bayY, bayW, bayH, 60, 48, 38);
-        for (int sy = bayY + 12; sy < bayY + bayH; sy += 14)
-        {
-            DrawHLine(buf, width, height, bay1X, sy, bayW, 35, 28, 22);
-        }
-        DrawRect(buf, width, height, bay1X, bayY, bayW, bayH, 120, 100, 80);
-        DrawString(buf, width, height, bay1X + 80, bayY + 12, "BAY 03", 220, 220, 220);
-
-        // Bay 04 (Partially open)
-        DrawFilledRect(buf, width, height, bay2X, bayY, bayW, bayH - 40, 60, 48, 38);
-        for (int sy = bayY + 12; sy < bayY + bayH - 40; sy += 14)
-        {
-            DrawHLine(buf, width, height, bay2X, sy, bayW, 35, 28, 22);
-        }
-        DrawFilledRect(buf, width, height, bay2X, bayY + bayH - 40, bayW, 40, 15, 12, 10);
-        DrawRect(buf, width, height, bay2X, bayY, bayW, bayH, 120, 100, 80);
-        DrawString(buf, width, height, bay2X + 80, bayY + 12, "BAY 04", 220, 220, 220);
-
-        // 3. Platform & Dock Apron
-        DrawFilledRect(buf, width, height, 0, 180, width, height - 180, 24, 20, 16);
-
-        // High-visibility hazard diagonal stripes
-        for (int x = 0; x < width; x += 24)
-        {
-            bool isYellow = (x / 24) % 2 == 0;
-            byte b = (byte)(isYellow ? 20 : 15);
-            byte g = (byte)(isYellow ? 180 : 15);
-            byte r = (byte)(isYellow ? 245 : 15);
-            DrawFilledRect(buf, width, height, x, 180, 24, 12, b, g, r);
-        }
-
-        // 4. Motion Target
-        var t = (frameNumber % 140) / 140.0;
-        int truckX = (int)(bay2X + 30 + Math.Sin(t * Math.PI * 2) * 40);
-        int truckY = 200;
-        DrawRect(buf, width, height, truckX, truckY, 90, 60, 20, 180, 245);
-        DrawString(buf, width, height, truckX, truckY - 12, "VEHICLE [95%]", 20, 180, 245);
-    }
-
-    private static void RenderServerRoomScene(byte[] buf, int width, int height, long frameNumber)
-    {
-        // 1. Dark Data Center Background
-        DrawFilledRect(buf, width, height, 0, 0, width, height, 13, 7, 5);
-
-        // 2. Raised Floor Perforated Tiles
-        DrawFilledRect(buf, width, height, 0, 220, width, height - 220, 24, 18, 14);
-        for (int y = 220; y < height - 32; y += 28)
-        {
-            DrawHLine(buf, width, height, 0, y, width, 40, 32, 26);
-        }
-        for (int x = 30; x < width; x += 55)
-        {
-            DrawVLine(buf, width, height, x, 220, height - 252, 40, 32, 26);
-        }
-
-        // 3. 42U Server Racks on Left and Right Sides
-        int rackW = 160;
-
-        // Left Racks
-        DrawFilledRect(buf, width, height, 0, 44, rackW, 180, 22, 16, 12);
-        DrawRect(buf, width, height, 0, 44, rackW, 180, 60, 50, 40);
-
-        // Right Racks
-        DrawFilledRect(buf, width, height, width - rackW, 44, rackW, 180, 22, 16, 12);
-        DrawRect(buf, width, height, width - rackW, 44, rackW, 180, 60, 50, 40);
-
-        // Server Chassis Dividers & Status LEDs
-        for (int ry = 52; ry < 220; ry += 12)
-        {
-            DrawHLine(buf, width, height, 6, ry, rackW - 12, 35, 28, 20);
-            DrawHLine(buf, width, height, width - rackW + 6, ry, rackW - 12, 35, 28, 20);
-
-            bool led1 = (frameNumber + ry) % 7 != 0;
-            bool led2 = (frameNumber / 2 + ry) % 5 == 0;
-            if (led1) SetPixel(buf, width, height, 14, ry + 4, 30, 230, 40);
-            if (led2) SetPixel(buf, width, height, 22, ry + 4, 230, 160, 20);
-
-            bool rled1 = (frameNumber + ry * 2) % 6 != 0;
-            bool rled2 = (frameNumber / 3 + ry) % 4 == 0;
-            if (rled1) SetPixel(buf, width, height, width - 24, ry + 4, 30, 230, 40);
-            if (rled2) SetPixel(buf, width, height, width - 34, ry + 4, 20, 180, 240);
-        }
-
-        // 4. Overhead Blue Light
-        DrawFilledRect(buf, width, height, rackW, 44, width - rackW * 2, 8, 240, 140, 20);
-
-        // 5. Center Security Zone Box
-        int aisleX = 220;
-        int aisleY = 110;
-        DrawRect(buf, width, height, aisleX, aisleY, 200, 95, 230, 160, 30);
-        DrawString(buf, width, height, aisleX + 16, aisleY + 20, "ZONE SECURE: NO MOTION", 230, 160, 30);
-        DrawString(buf, width, height, aisleX + 16, aisleY + 38, "TEMP: 19.4 C | HUMID: 42%", 180, 180, 180);
-        DrawString(buf, width, height, aisleX + 16, aisleY + 54, "AIRFLOW: OPTIMAL", 40, 210, 50);
-    }
-
-    private static void RenderReceptionScene(byte[] buf, int width, int height, long frameNumber)
-    {
-        // 1. Architectural Wood Feature Wall
-        DrawFilledRect(buf, width, height, 0, 0, width, 160, 28, 38, 54);
-        for (int wx = 10; wx < width; wx += 14)
-        {
-            DrawVLine(buf, width, height, wx, 0, 160, 20, 28, 42);
-        }
-
-        // Corporate Plaque
-        int logoX = 230;
-        int logoY = 55;
-        DrawFilledRect(buf, width, height, logoX, logoY, 180, 36, 40, 30, 20);
-        DrawRect(buf, width, height, logoX, logoY, 180, 36, 240, 180, 50);
-        DrawString(buf, width, height, logoX + 18, logoY + 14, "GLOBAL HEADQUARTERS", 240, 240, 240);
-
-        // 2. Marble Lobby Flooring
-        DrawFilledRect(buf, width, height, 0, 160, width, height - 160, 28, 24, 20);
-        for (int my = 175; my < height - 32; my += 35)
-        {
-            DrawHLine(buf, width, height, 0, my, width, 42, 36, 30);
-        }
-
-        // 3. Reception Counter
-        int deskX = 170;
-        int deskY = 145;
-        int deskW = 300;
-        int deskH = 65;
-        DrawFilledRect(buf, width, height, deskX, deskY, deskW, deskH, 70, 60, 50);
-        DrawRect(buf, width, height, deskX, deskY, deskW, deskH, 120, 105, 90);
-        DrawFilledRect(buf, width, height, deskX - 10, deskY, deskW + 20, 10, 160, 150, 140);
-        DrawHLine(buf, width, height, deskX, deskY + deskH - 2, deskW, 20, 180, 245);
-
-        // 4. Potted Plant
-        DrawFilledCircle(buf, width, height, 60, 175, 22, 35, 90, 40);
-        DrawFilledCircle(buf, width, height, 75, 165, 18, 30, 80, 35);
-        DrawFilledRect(buf, width, height, 50, 185, 30, 35, 45, 40, 35);
-
-        // 5. Tracking Box
-        var t = (frameNumber % 180) / 180.0;
-        int trackX = (int)(220 + Math.Sin(t * Math.PI * 2) * 60);
-        int trackY = 175;
-        DrawRect(buf, width, height, trackX, trackY, 50, 65, 230, 180, 30);
-        DrawString(buf, width, height, trackX, trackY - 12, "LOBBY 91%", 230, 180, 30);
-    }
-
-    private static void RenderParkingLotScene(byte[] buf, int width, int height, long frameNumber)
-    {
-        // 1. Twilight Sky & Horizon
-        DrawFilledRect(buf, width, height, 0, 0, width, 110, 45, 28, 18);
-        DrawFilledRect(buf, width, height, 0, 110, width, 25, 25, 22, 18);
-        DrawHLine(buf, width, height, 0, 134, width, 60, 50, 40);
-
-        // 2. Asphalt Parking Lot
-        DrawFilledRect(buf, width, height, 0, 135, width, height - 135, 22, 18, 15);
-
-        // Painted stalls
-        for (int px = 50; px < width - 60; px += 85)
-        {
-            for (int py = 160; py < height - 32; py++)
-            {
-                SetPixel(buf, width, height, px - (py - 160) / 3, py, 180, 180, 180);
-            }
-        }
-
-        // Parked Cars
-        DrawFilledRect(buf, width, height, 70, 175, 60, 35, 45, 38, 30);
-        DrawFilledRect(buf, width, height, 240, 175, 60, 35, 35, 30, 55);
-
-        // Floodlights
-        DrawVLine(buf, width, height, 160, 60, 100, 90, 80, 70);
-        DrawFilledCircle(buf, width, height, 160, 60, 6, 20, 220, 250);
-
-        DrawVLine(buf, width, height, 480, 60, 100, 90, 80, 70);
-        DrawFilledCircle(buf, width, height, 480, 60, 6, 20, 220, 250);
-
-        // 3. Moving Vehicle Target Box
-        var t = (frameNumber % 120) / 120.0;
-        int carX = (int)(20 + t * 480);
-        int carY = 225;
-        DrawRect(buf, width, height, carX, carY, 80, 48, 20, 150, 245);
-        DrawString(buf, width, height, carX, carY - 12, "CAR [94%] 22MPH", 20, 150, 245);
-    }
-
-    private static void RenderDefaultSurveillanceScene(byte[] buf, int width, int height, long frameNumber)
-    {
+        // Dark tactical grid background
         DrawFilledRect(buf, width, height, 0, 0, width, height, 25, 15, 11);
         for (int x = 40; x < width; x += 40)
         {
@@ -378,19 +268,32 @@ public static class SyntheticFrameGenerator
         {
             DrawHLine(buf, width, height, 0, y, width, 59, 41, 30);
         }
-
-        int cx = width / 2;
-        int cy = height / 2;
-        var t = (frameNumber % 120) / 120.0;
-        var boxX = (int)(cx - 90 + Math.Sin(t * Math.PI * 2) * 80);
-        var boxY = (int)(cy - 50 + Math.Cos(t * Math.PI * 2) * 40);
-        DrawRect(buf, width, height, boxX, boxY, 60, 60, 11, 158, 245);
-        DrawString(buf, width, height, boxX, boxY - 12, "TARGET ACQUIRED", 11, 158, 245);
     }
 
     #endregion
 
-    #region Pixel Drawing Helpers
+    #region Pixel Drawing Helpers (24bpp BGR)
+
+    public static void DrawTranslucentRect(byte[] buf, int width, int height, int x, int y, int w, int h, byte b, byte g, byte r, double alpha = 0.65)
+    {
+        int x0 = Math.Max(0, x);
+        int x1 = Math.Min(width, x + w);
+        int y0 = Math.Max(0, y);
+        int y1 = Math.Min(height, y + h);
+
+        double invAlpha = 1.0 - alpha;
+        for (int py = y0; py < y1; py++)
+        {
+            int rowOffset = HeaderSize + (py * width) * 3;
+            for (int px = x0; px < x1; px++)
+            {
+                int idx = rowOffset + px * 3;
+                buf[idx] = (byte)(buf[idx] * invAlpha + b * alpha);
+                buf[idx + 1] = (byte)(buf[idx + 1] * invAlpha + g * alpha);
+                buf[idx + 2] = (byte)(buf[idx + 2] * invAlpha + r * alpha);
+            }
+        }
+    }
 
     public static void DrawFilledRect(byte[] buf, int width, int height, int x, int y, int w, int h, byte b, byte g, byte r)
     {
@@ -401,14 +304,13 @@ public static class SyntheticFrameGenerator
 
         for (int py = y0; py < y1; py++)
         {
-            int rowOffset = HeaderSize + (py * width) * 4;
+            int rowOffset = HeaderSize + (py * width) * 3;
             for (int px = x0; px < x1; px++)
             {
-                int idx = rowOffset + px * 4;
+                int idx = rowOffset + px * 3;
                 buf[idx] = b;
                 buf[idx + 1] = g;
                 buf[idx + 2] = r;
-                buf[idx + 3] = 255;
             }
         }
     }
@@ -418,14 +320,13 @@ public static class SyntheticFrameGenerator
         if (y < 0 || y >= height) return;
         int x0 = Math.Max(0, x);
         int x1 = Math.Min(width, x + length);
-        int rowOffset = HeaderSize + (y * width) * 4;
+        int rowOffset = HeaderSize + (y * width) * 3;
         for (int px = x0; px < x1; px++)
         {
-            int idx = rowOffset + px * 4;
+            int idx = rowOffset + px * 3;
             buf[idx] = b;
             buf[idx + 1] = g;
             buf[idx + 2] = r;
-            buf[idx + 3] = 255;
         }
     }
 
@@ -436,25 +337,23 @@ public static class SyntheticFrameGenerator
         int y1 = Math.Min(height, y + length);
         for (int py = y0; py < y1; py++)
         {
-            int idx = HeaderSize + (py * width + x) * 4;
+            int idx = HeaderSize + (py * width + x) * 3;
             buf[idx] = b;
             buf[idx + 1] = g;
             buf[idx + 2] = r;
-            buf[idx + 3] = 255;
         }
     }
 
     public static void SetPixel(byte[] buf, int width, int height, int x, int y, byte b, byte g, byte r)
     {
         if (x < 0 || x >= width || y < 0 || y >= height) return;
-        var idx = HeaderSize + (y * width + x) * 4;
+        var idx = HeaderSize + (y * width + x) * 3;
         buf[idx] = b;
         buf[idx + 1] = g;
         buf[idx + 2] = r;
-        buf[idx + 3] = 255;
     }
 
-    private static void DrawRect(byte[] buf, int width, int height, int x, int y, int w, int h, byte b, byte g, byte r)
+    public static void DrawRect(byte[] buf, int width, int height, int x, int y, int w, int h, byte b, byte g, byte r)
     {
         for (int i = 0; i < w; i++)
         {
@@ -468,7 +367,7 @@ public static class SyntheticFrameGenerator
         }
     }
 
-    private static void DrawFilledCircle(byte[] buf, int width, int height, int cx, int cy, int radius, byte b, byte g, byte r)
+    public static void DrawFilledCircle(byte[] buf, int width, int height, int cx, int cy, int radius, byte b, byte g, byte r)
     {
         for (int y = -radius; y <= radius; y++)
         {
@@ -482,7 +381,7 @@ public static class SyntheticFrameGenerator
         }
     }
 
-    private static void DrawString(byte[] buf, int width, int height, int x, int y, string text, byte b, byte g, byte r)
+    public static void DrawString(byte[] buf, int width, int height, int x, int y, string text, byte b, byte g, byte r)
     {
         int curX = x;
         foreach (var ch in text)

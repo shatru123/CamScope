@@ -63,4 +63,28 @@ public class LiveCellViewModelTests
         cell.Device = null;
         Assert.Equal("Idle - Select an authenticated camera", cell.StatusText);
     }
+
+    [Fact]
+    public void ChangingDevice_ToDemoDevice_SetsStatusText()
+    {
+        var streamingService = new StreamingService(NullLoggerFactory.Instance);
+        var cameras = new ObservableCollection<CameraDevice>();
+        var cell = new LiveCellViewModel(streamingService, cameras);
+
+        var device = new CameraDevice
+        {
+            DisplayName = "[DEMO] Front Entrance Dome",
+            Host = "192.168.1.101",
+            AuthState = AuthenticationState.Authenticated,
+            IsDemoDevice = true
+        };
+
+        cell.Device = device;
+        Assert.Equal("Sample preview active - Click Start to stream", cell.StatusText);
+        if (Avalonia.Application.Current != null)
+        {
+            Assert.NotNull(cell.CurrentBitmap);
+        }
+    }
 }
+

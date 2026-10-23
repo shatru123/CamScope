@@ -55,6 +55,66 @@
         </StackPanel>
       </Border>
 
+      <!-- Historical Replay Monitor -->
+      <Border Classes="card" IsVisible="{Binding SelectedDevice, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <StackPanel Spacing="12">
+          <Grid ColumnDefinitions="*, Auto">
+            <TextBlock Grid.Column="0" Text="Historical Replay Viewport" Classes="cardTitle" VerticalAlignment="Center"/>
+            <Border Grid.Column="1" Background="#40D97706" BorderBrush="#F59E0B" BorderThickness="1"
+                    CornerRadius="4" Padding="8,4" IsVisible="{Binding IsDemoRecording}">
+              <TextBlock Text="PRE-RECORDED ARCHIVE [DEMO]" FontSize="11" FontWeight="Bold" Foreground="#FBBF24"/>
+            </Border>
+          </Grid>
+
+          <!-- 16:9 Aspect Ratio Viewport -->
+          <Border Background="#050811" CornerRadius="6" ClipToBounds="True">
+            <Viewbox Stretch="Uniform" MaxHeight="420">
+              <Grid Width="1280" Height="720">
+
+                <!-- Decoded Archive Video Frame -->
+                <Image Source="{Binding PlaybackBitmap}" Stretch="Fill"
+                       IsVisible="{Binding PlaybackBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                <!-- Fallback when no frame -->
+                <Border Background="#050811"
+                        IsVisible="{Binding PlaybackBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <TextBlock Text="NO RECORDING FOOTAGE LOADED" FontWeight="Bold" FontSize="22"
+                               Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                               FontFamily="Consolas, Menlo, Monaco, monospace"/>
+                    <TextBlock Text="Select a recording segment from the timeline below and click Replay"
+                               FontSize="14" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center"/>
+                  </StackPanel>
+                </Border>
+
+                <!-- Top Archive Telemetry Bar -->
+                <Border VerticalAlignment="Top" Background="#B3050912" Padding="18,10"
+                        IsVisible="{Binding PlaybackBitmap, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <Grid ColumnDefinitions="*, Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding SegmentOsdTag}"
+                               FontFamily="Consolas, Menlo, Monaco, monospace"
+                               FontSize="14" FontWeight="Bold" Foreground="#FCD34D"/>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                      <Border Background="#1A2234" CornerRadius="4" Padding="8,3"
+                              BorderBrush="#F59E0B" BorderThickness="1"
+                              IsVisible="{Binding IsDemoRecording}">
+                        <TextBlock Text="ARCHIVE [DEMO]" FontFamily="Consolas, Menlo, Monaco, monospace"
+                                   FontSize="11" FontWeight="Bold" Foreground="#FBBF24"/>
+                      </Border>
+                      <TextBlock Text="{Binding PlaybackTimeText, StringFormat='TIME: {0}'}"
+                                 FontFamily="Consolas, Menlo, Monaco, monospace"
+                                 FontSize="14" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+
+              </Grid>
+            </Viewbox>
+          </Border>
+        </StackPanel>
+      </Border>
+
       <!-- Recording Segments Timeline & Results -->
       <Border Classes="card">
         <StackPanel Spacing="16">
@@ -96,7 +156,10 @@
                       <TextBlock Text="{Binding Duration, StringFormat='Duration: {0:hh\\:mm\\:ss}'}" FontSize="11" FontWeight="Bold"/>
                     </Border>
 
-                    <Button Grid.Column="2" Content="Select" Classes="secondary" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Content="Replay"
+                            Command="{Binding $parent[UserControl].DataContext.PlayCommand}"
+                            CommandParameter="{Binding}"
+                            Classes="secondary" VerticalAlignment="Center"/>
                   </Grid>
                 </Border>
               </DataTemplate>

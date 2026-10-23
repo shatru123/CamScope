@@ -78,7 +78,7 @@ public sealed class ApplicationSettings
     public bool AutoReconnectStreams { get; set; } = true;
     public int StreamReconnectMaxRetries { get; set; } = 5;
     public int RetainAuditDays { get; set; } = 30;
-    public bool IsDemoModeEnabled { get; set; } = false;
+    public bool IsDemoModeEnabled { get; set; } = true;
     public string? DefaultInterfaceId { get; set; }
 }
 

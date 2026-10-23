@@ -24,6 +24,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly SettingsViewModel _settingsVm;
     private readonly ISettingsService _settingsService;
     private readonly INetworkSelectionService? _selectionService;
+    private readonly DemoModeState _demoModeState;
 
     [ObservableProperty] private int _selectedNavigationIndex;
     [ObservableProperty] private ViewModelBase _currentPage;
@@ -60,7 +61,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         AuditLogViewModel auditVm,
         SettingsViewModel settingsVm,
         ISettingsService settingsService,
-        INetworkSelectionService? selectionService = null)
+        INetworkSelectionService? selectionService = null,
+        DemoModeState? demoModeState = null)
     {
         _overviewVm = overviewVm;
         _discoveryVm = discoveryVm;
@@ -75,6 +77,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _settingsVm = settingsVm;
         _settingsService = settingsService;
         _selectionService = selectionService;
+        _demoModeState = demoModeState ?? new DemoModeState();
 
         _currentPage = _overviewVm;
 
@@ -94,6 +97,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         var settings = await _settingsService.LoadSettingsAsync();
         IsDemoModeEnabled = settings.IsDemoModeEnabled;
+        _demoModeState.IsDemoMode = settings.IsDemoModeEnabled;
 
         if (_selectionService?.CurrentScanningInterface != null)
         {
@@ -106,6 +110,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         await _overviewVm.RefreshAsync();
+        if (IsDemoModeEnabled)
+        {
+            await _liveVm.LoadCamerasAsync();
+        }
     }
 
     partial void OnSelectedNavigationIndexChanged(int value)
@@ -146,9 +154,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnIsDemoModeEnabledChanged(bool value)
     {
+        _demoModeState.IsDemoMode = value;
+        _ = _settingsService.SaveSettingsAsync(new CamScope.Core.Models.ApplicationSettings { IsDemoModeEnabled = value });
         ShowNotification(value
-            ? "[DEMO MODE ENABLED] Simulated cameras will be used. External network sockets will not be scanned."
+            ? "[DEMO MODE ENABLED] Simulated cameras with real surveillance feeds active."
             : "[DEMO MODE DISABLED] Switched to genuine local network discovery.");
+
+        if (value)
+        {
+            _ = _liveVm.LoadCamerasAsync();
+        }
     }
 
     partial void OnIsDarkThemeChanged(bool value)
